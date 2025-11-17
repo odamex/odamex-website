@@ -29,6 +29,9 @@
             "styles": [
               "node_modules/bootstrap/scss/bootstrap.scss",
               "src/styles.scss"
+            ],
+            "polyfills": [
+              "@angular/localize/init"
             ]
           },
           "configurations": {
@@ -84,6 +87,9 @@
             "styles": [
               "node_modules/bootstrap/dist/scss/bootstrap.scss",
               "src/styles.scss"
+            ],
+            "polyfills": [
+              "@angular/localize/init"
             ]
           }
         }
