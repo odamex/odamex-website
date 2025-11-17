@@ -1,1 +1,32 @@
 /* You can add global styles to this file, and also import other style files */
+
+html {background: #2c2c2c none no-repeat center -400px;background-attachment: fixed; overflow-x:hidden;min-height:100%;}
+
+body {
+  background: transparent none;
+  color: #5a5a5a;
+  color: #DDD;
+  font-family: 'open sans';
+  cursor: default;
+  min-width: 24rem;
+  min-height:100%;
+}
+
+a:not(.btn), a:not(.btn):visited, a:not(.btn):link {
+    color: #ffa300;
+    transition: all 0.1s 
+    ease-in-out 0s;
+    cursor: pointer;
+}
+
+
+
+.invisible,.hide-loading {
+	visibility:hidden;
+}
+.no-border {
+    border: 0 none !important;
+}
+.display-block {
+    display:block;
+}
