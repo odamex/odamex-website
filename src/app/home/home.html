@@ -1,5 +1,5 @@
 @if (images) {
-	<ngb-carousel #carousel>
+	<ngb-carousel #carousel class="shadow-sm">
         @for (item of carouselItems; track $index) {
             <ng-template ngbSlide id="slide-{{$index}}">
                 <div class="img-wrapper">
@@ -30,42 +30,40 @@
         <div class="badges"></div>
     </div>
 </div>
-<div class="clamp">
-    <div class="content download-strip text-center">
-        <h2>Download Now for Your Platform</h2>
-        <p>Each stable package includes client, server, and launcher applications.</p>
-        <div class="items"></div>
+<div class="content download-strip text-center p-5">
+    <h2>Download Now for Your Platform</h2>
+    <p>Each stable package includes client, server, and launcher applications.</p>
+    <div class="items"></div>
+</div>
+<div class="content light news-strip text-center p-5">
+    <h2>News & Announcements</h2>
+    <div class="items"></div>
+</div>
+<div class="content dev-strip text-center p-5">
+    <h2>Latest Development Updates</h2>
+    <div class="badges"></div>
+    <div class="d-flex flex-row">
+        <div class="changelog"></div>
+        <div class="issues"></div>
     </div>
-    <div class="content light news-strip text-center">
-        <h2>News & Announcements</h2>
-        <div class="items"></div>
+</div>
+<div class="content light game-strip text-center p-5">
+    <div class="pt-4 pb-4">
+        <h2>Doom, Doom II & More</h2>
+        <p>ODAMEX is compatible with the following games:</p>
+        <span class="d-flex justify-content-center flex-wrap game-icons">
+            <a title="Doom and Ultimate Doom" alt="Doom and Ultimate Doom" target="new" href="https://doomwiki.org/wiki/Doom"><img src="/assets/icons/icon-doom-128.png"></a>
+            <a title="Doom II" alt="Doom II" target="new" href="https://doomwiki.org/wiki/Doom_II"><img src="/assets/icons/icon-doom2-128.png"></a>
+            <a title="Final Doom" alt="Final Doom" target="new" href="https://doomwiki.org/wiki/Final_Doom"><img src="/assets/icons/icon-finaldoom-128.png"></a>
+            <a title="Chex Quest" alt="Chex Quest" target="new" href="https://doomwiki.org/wiki/Chex_Quest"><img src="/assets/icons/icon-chexquest-128.png"></a>
+            <a title="FreeDoom" alt="FreeDoom" target="new" href="https://doomwiki.org/wiki/FreeDoom"><img src="/assets/icons/icon-freedoom-128.png"></a>
+        </span>
     </div>
-    <div class="content dev-strip text-center">
-        <h2>Latest Development Updates</h2>
-        <div class="badges"></div>
-        <div class="d-flex flex-row">
-            <div class="changelog"></div>
-            <div class="issues"></div>
-        </div>
-    </div>
-    <div class="content light game-strip text-center">
-        <div>
-            <h2>Doom, Doom II & More</h2>
-            <p>ODAMEX is compatible with the following games:</p>
-            <span class="d-flex justify-content-center flex-wrap game-icons">
-                <a title="Doom and Ultimate Doom" alt="Doom and Ultimate Doom" target="new" href="https://doomwiki.org/wiki/Doom"><img src="/assets/icons/icon-doom-128.png"></a>
-                <a title="Doom II" alt="Doom II" target="new" href="https://doomwiki.org/wiki/Doom_II"><img src="/assets/icons/icon-doom2-128.png"></a>
-                <a title="Final Doom" alt="Final Doom" target="new" href="https://doomwiki.org/wiki/Final_Doom"><img src="/assets/icons/icon-finaldoom-128.png"></a>
-                <a title="Chex Quest" alt="Chex Quest" target="new" href="https://doomwiki.org/wiki/Chex_Quest"><img src="/assets/icons/icon-chexquest-128.png"></a>
-                <a title="FreeDoom" alt="FreeDoom" target="new" href="https://doomwiki.org/wiki/FreeDoom"><img src="/assets/icons/icon-freedoom-128.png"></a>
-            </span>
-        </div>
-        <div>
-            <h2>Open Source, Any Platform*</h2>
-            <p>
-                ODAMEX is designed with portability in mind. From PCs to netbooks, consoles to handhelds, Amiga to Windows - our goal is for any device to run multiplayer Doom.
-            </p>
-            <p>If you have ported ODAMEX to a new device or platform, <a href="https://github.com/odamex/odamex/issues/new?template=feature-request.md">let us know!</a></p>
-        </div>
+    <div class="pt-4 pb-4">
+        <h2>Open Source, Any Platform<sup>*</sup></h2>
+        <p>
+            ODAMEX is designed with portability in mind. From PCs to netbooks, consoles to handhelds, Amiga to Windows - our goal is for any device to run multiplayer Doom.
+        </p>
+        <p>If you have ported ODAMEX to a new device or platform, <a href="https://github.com/odamex/odamex/issues/new?template=feature-request.md">let us know!</a></p>
     </div>
 </div>

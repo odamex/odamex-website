@@ -1,6 +1,6 @@
 <nav class="navbar navbar-expand-lg bg-body-tertiary" data-bs-theme="dark">
   <div class="container-fluid">
-    <a class="navbar-brand" href="#">Offcanvas navbar</a>
+    <a class="navbar-brand" href="#"><img src="/assets/email_logo.png" /></a>
     <button class="navbar-toggler" type="button" data-bs-toggle="offcanvas" data-bs-target="#navbarOffcanvasLg" aria-controls="navbarOffcanvasLg" aria-label="Toggle navigation">
         <span class="navbar-toggler-icon"></span>
     </button>
@@ -10,30 +10,72 @@
         <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Close"></button>
       </div>
       <div class="offcanvas-body">
-        <ul class="navbar-nav justify-content-end flex-grow-1 pe-3">
+        <ul class="navbar-nav flex-grow-1 pe-3">
           <li class="nav-item">
-            <a class="nav-link active" aria-current="page" href="#">Home</a>
+            <div ngbDropdown class="d-inline-block">
+                <button type="button" class="btn btn-link" id="nav-about" ngbDropdownToggle>
+                    About
+                </button>
+                <div ngbDropdownMenu aria-labelledby="nav-about">
+                    <button ngbDropdownItem>Mission</button>
+                    <button ngbDropdownItem>Release History</button>
+                    <button ngbDropdownItem>FAQs</button>
+                </div>
+            </div>
           </li>
           <li class="nav-item">
-            <a class="nav-link" href="#">Link</a>
+            <div ngbDropdown class="d-inline-block">
+                <button type="button" class="btn btn-link" id="nav-downloads" ngbDropdownToggle>
+                    Downloads
+                </button>
+                <div ngbDropdownMenu aria-labelledby="nav-downloads">
+                    <button ngbDropdownItem>All Downloads</button>
+                </div>
+            </div>
           </li>
           <li class="nav-item dropdown">
-		<div ngbDropdown class="d-inline-block">
-			<button type="button" class="btn btn-light" id="dropdownBasic1" ngbDropdownToggle>
-				Toggle dropdown
-			</button>
-			<div ngbDropdownMenu aria-labelledby="dropdownBasic1">
-				<button ngbDropdownItem>Action - 1</button>
-				<button ngbDropdownItem>Another Action</button>
-				<button ngbDropdownItem>Something else is here</button>
-			</div>
-		</div>
+		    <div ngbDropdown class="d-inline-block">
+                <button type="button" class="btn btn-link" id="nav-community" ngbDropdownToggle>
+                    Community
+                </button>
+                <div ngbDropdownMenu aria-labelledby="nav-community">
+                    <button ngbDropdownItem>Discord</button>
+                    <button ngbDropdownItem>Discussion Boards</button>
+                    <button ngbDropdownItem>Wiki</button>
+                    <button ngbDropdownItem>Issue Tracker</button>
+                    <button ngbDropdownItem>Server List</button>
+                    <hr />
+                    <h5>Donate via...</h5>
+                    <button ngbDropdownItem>Paypal</button>
+                    <hr />
+                    <h5>Social Networks</h5>
+                    <button ngbDropdownItem>Steam Group</button>
+                    <button ngbDropdownItem>Facebook</button>
+                </div>
+		    </div>
+          </li>
+          <li class="nav-item">
+            <div ngbDropdown class="d-inline-block">
+                <button type="button" class="btn btn-link" id="nav-downloads" ngbDropdownToggle>
+                    Developers
+                </button>
+                <div ngbDropdownMenu aria-labelledby="nav-downloads">
+                    <button ngbDropdownItem>Browse Code Repository</button>
+                    <button ngbDropdownItem>Changelog</button>
+                    <button ngbDropdownItem>Build from Source</button>
+                    <hr />
+                    <button ngbDropdownItem>Post New Bug</button>
+                    <button ngbDropdownItem>All Open Bugs</button>
+                    <button ngbDropdownItem>All Open Pull Requests</button>
+                </div>
+            </div>
           </li>
         </ul>
-        <form class="d-flex" role="search">
-          <input class="form-control me-2" type="search" placeholder="Search" aria-label="Search"/>
-          <button class="btn btn-outline-success" type="submit">Search</button>
-        </form>
+        <div class="d-flex" role="game-menu">
+            <button class="btn btn-secondary" type="submit">Download</button>
+            <button class="btn btn-secondary" type="submit">Servers</button>
+            <button class="btn btn-secondary" type="submit">User</button>
+        </div>
       </div>
     </div>
   </div>
