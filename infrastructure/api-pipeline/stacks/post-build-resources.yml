@@ -1,0 +1,85 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: Post-build-stage stack for resources depending on build script resources before creation/implementation
+Parameters:
+  DatabaseClusterArn:
+    Type: String
+  DatabaseSubnetList:
+    Type: String
+    Description: Enter at least two subnet IDs for the database cluster
+  DatabaseSecurityGroup:
+    Type: String
+    Description: Security group for database access
+  Env:
+    AllowedValues:
+      - local
+      - dev
+      - qa
+      - stg
+      - prod
+    Type: String
+  secretRotationCodeVersionId:
+    Type: String
+    Description: S3 version ID of deployment package for secret rotation lambda code
+
+Conditions:
+  EnableQuickSight: !Or
+    - !Equals [!Ref Env, dev]
+    - !Equals [!Ref Env, local]
+
+Resources:
+  SecretRotationSchedule:
+    Type: AWS::SecretsManager::RotationSchedule
+    Properties:
+      SecretId: !Sub ${Env}DatabasePasswordV2
+      RotateImmediatelyOnUpdate: false
+      RotationRules:
+        # We want to keep the rotation during night hours to reduce the likelihood
+        # of service failures while the password updates throughout all services
+        # So instead of 'rate(60 days)', this cron expression sets it to run at
+        # 02:00 on the 1st day of every odd month = ~every 60 days
+        ScheduleExpression: 'cron(0 2 1 1-11/2 ? *)'
+      RotationLambdaARN: !GetAtt
+        - SecretRotationScheduleHostedRotationLambda
+        - Outputs.RotationLambdaARN
+  SecretRotationScheduleCldb:
+    Type: AWS::SecretsManager::RotationSchedule
+    Properties:
+      SecretId: !Sub ${Env}DatabasePasswordCldbV2
+      RotateImmediatelyOnUpdate: false
+      RotationRules:
+        # We want to keep the rotation during night hours to reduce the likelihood
+        # of service failures while the password updates throughout all services
+        # So instead of 'rate(60 days)', this cron expression sets it to run at
+        # 02:00 on the 1st day of every odd month = ~every 60 days
+        ScheduleExpression: 'cron(0 2 1 1-11/2 ? *)'
+      RotationLambdaARN: !GetAtt
+        - SecretRotationScheduleHostedRotationLambda
+        - Outputs.RotationLambdaARN
+  SecretRotationScheduleQuickSight:
+    Type: AWS::SecretsManager::RotationSchedule
+    Condition: EnableQuickSight
+    Properties:
+      SecretId: !Sub ${Env}DatabasePasswordQuickSight
+      RotateImmediatelyOnUpdate: false
+      RotationRules:
+        # We want to keep the rotation during night hours to reduce the likelihood
+        # of service failures while the password updates throughout all services
+        # So instead of 'rate(60 days)', this cron expression sets it to run at
+        # 02:00 on the 1st day of every odd month = ~every 60 days
+        ScheduleExpression: 'cron(0 2 1 1-11/2 ? *)'
+      RotationLambdaARN: !GetAtt
+        - SecretRotationScheduleHostedRotationLambda
+        - Outputs.RotationLambdaARN
+  SecretRotationScheduleHostedRotationLambda:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: !Sub https://${Env}-odamex-infrastructure.s3.amazonaws.com/nested-stacks/secret-rotation-sam.yml
+      Parameters:
+        dbCluster: !Ref DatabaseClusterArn
+        endpoint: https://secretsmanager.us-east-1.amazonaws.com
+        env: !Ref Env
+        functionName: !Sub SecretsManager-db-rotation-${Env}
+        invokingServicePrincipal: secretsmanager.amazonaws.com
+        secretRotationCodeVersionId: !Ref secretRotationCodeVersionId
+        vpcSubnetIds: !Ref DatabaseSubnetList
+        vpcSecurityGroupIds: !Ref DatabaseSecurityGroup

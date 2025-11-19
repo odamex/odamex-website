@@ -1,6 +1,6 @@
 <nav class="navbar navbar-expand-lg bg-body-tertiary" data-bs-theme="dark">
   <div class="container-fluid">
-    <a class="navbar-brand" href="#"><img src="/assets/email_logo.png" /></a>
+    <a class="navbar-brand ms-3" href="#"><img src="/assets/email_logo.png" /></a>
     <button class="navbar-toggler" type="button" data-bs-toggle="offcanvas" data-bs-target="#navbarOffcanvasLg" aria-controls="navbarOffcanvasLg" aria-label="Toggle navigation">
         <span class="navbar-toggler-icon"></span>
     </button>
@@ -11,70 +11,59 @@
       </div>
       <div class="offcanvas-body">
         <ul class="navbar-nav flex-grow-1 pe-3">
-          <li class="nav-item">
-            <div ngbDropdown class="d-inline-block">
-                <button type="button" class="btn btn-link" id="nav-about" ngbDropdownToggle>
-                    About
-                </button>
-                <div ngbDropdownMenu aria-labelledby="nav-about">
-                    <button ngbDropdownItem>Mission</button>
-                    <button ngbDropdownItem>Release History</button>
-                    <button ngbDropdownItem>FAQs</button>
-                </div>
+          <li class="nav-item" ngbDropdown display="dynamic" placement="bottom-start">
+            <a class="nav-link" tabindex="0" ngbDropdownToggle id="nav-about" role="button"> About </a>
+            <div ngbDropdownMenu aria-labelledby="nav-about" class="dropdown-menu shadow-sm">
+                <a ngbDropdownItem href="#" (click)="$event.preventDefault()"><i class="bi bi-x-diamond-fill"></i><span>Mission</span></a>
+                <a ngbDropdownItem href="#" (click)="$event.preventDefault()"><i class="bi bi-clock-history"></i><span>Release History</span></a>
+                <a ngbDropdownItem href="#" (click)="$event.preventDefault()"><i class="bi bi-question-circle"></i><span>FAQs</span></a>
             </div>
           </li>
-          <li class="nav-item">
-            <div ngbDropdown class="d-inline-block">
-                <button type="button" class="btn btn-link" id="nav-downloads" ngbDropdownToggle>
-                    Downloads
-                </button>
-                <div ngbDropdownMenu aria-labelledby="nav-downloads">
-                    <button ngbDropdownItem>All Downloads</button>
-                </div>
+          <li class="nav-item" ngbDropdown display="dynamic" placement="bottom-start">
+            <a class="nav-link" tabindex="0" ngbDropdownToggle id="nav-downloads" role="button"> Downloads </a>
+            <div ngbDropdownMenu aria-labelledby="nav-downloads" class="dropdown-menu shadow-sm">
+                <a ngbDropdownItem href="#" (click)="$event.preventDefault()"><i class="bi bi-download"></i><span>All Downloads</span></a>
             </div>
           </li>
-          <li class="nav-item dropdown">
-		    <div ngbDropdown class="d-inline-block">
-                <button type="button" class="btn btn-link" id="nav-community" ngbDropdownToggle>
-                    Community
-                </button>
-                <div ngbDropdownMenu aria-labelledby="nav-community">
-                    <button ngbDropdownItem>Discord</button>
-                    <button ngbDropdownItem>Discussion Boards</button>
-                    <button ngbDropdownItem>Wiki</button>
-                    <button ngbDropdownItem>Issue Tracker</button>
-                    <button ngbDropdownItem>Server List</button>
-                    <hr />
-                    <h5>Donate via...</h5>
-                    <button ngbDropdownItem>Paypal</button>
-                    <hr />
-                    <h5>Social Networks</h5>
-                    <button ngbDropdownItem>Steam Group</button>
-                    <button ngbDropdownItem>Facebook</button>
-                </div>
-		    </div>
+          <li class="nav-item" ngbDropdown display="dynamic" placement="bottom-start">
+            <a class="nav-link" tabindex="0" ngbDropdownToggle id="nav-community" role="button"> Community </a>
+            <div ngbDropdownMenu aria-labelledby="nav-community" class="dropdown-menu shadow-sm">
+                <a ngbDropdownItem href="#" (click)="$event.preventDefault()"><i class="bi bi-discord"></i><span>Discord</span></a>
+                <a ngbDropdownItem href="#" (click)="$event.preventDefault()"><i class="bi bi-list-task"></i><span>Discussion Boards</span></a>
+                <a ngbDropdownItem href="#" (click)="$event.preventDefault()"><i class="bi bi-pencil-square"></i><span>Wiki</span></a>
+                <a ngbDropdownItem href="#" (click)="$event.preventDefault()"><i class="bi bi-bug-fill"></i><span>Issue Tracker</span></a>
+                <a ngbDropdownItem href="#" (click)="$event.preventDefault()"><i class="bi bi-hdd-stack-fill"></i><span>Server List</span></a>
+                <hr />
+                <h6>Donate via...</h6>
+                <a ngbDropdownItem href="#" (click)="$event.preventDefault()"><i class="bi bi-paypal"></i><span>Paypal</span></a>
+                <hr />
+                <h6>Social Networks</h6>
+                <a ngbDropdownItem href="#" (click)="$event.preventDefault()"><i class="bi bi-steam"></i><span>Steam Group</span></a>
+                <a ngbDropdownItem href="#" (click)="$event.preventDefault()"><i class="bi bi-facebook"></i><span>Facebook</span></a>
+            </div>
           </li>
-          <li class="nav-item">
-            <div ngbDropdown class="d-inline-block">
-                <button type="button" class="btn btn-link" id="nav-downloads" ngbDropdownToggle>
-                    Developers
-                </button>
-                <div ngbDropdownMenu aria-labelledby="nav-downloads">
-                    <button ngbDropdownItem>Browse Code Repository</button>
-                    <button ngbDropdownItem>Changelog</button>
-                    <button ngbDropdownItem>Build from Source</button>
-                    <hr />
-                    <button ngbDropdownItem>Post New Bug</button>
-                    <button ngbDropdownItem>All Open Bugs</button>
-                    <button ngbDropdownItem>All Open Pull Requests</button>
-                </div>
+          <li class="nav-item" ngbDropdown display="dynamic" placement="bottom-start">
+            <a class="nav-link" tabindex="0" ngbDropdownToggle id="nav-downloads" role="button">
+                Developers
+            </a>
+            <div ngbDropdownMenu aria-labelledby="nav-downloads" class="dropdown-menu shadow-sm">
+                <a ngbDropdownItem href="#" (click)="$event.preventDefault()"><i class="bi bi-file-code"></i><span>Browse Code Repository</span></a>
+                <a ngbDropdownItem href="#" (click)="$event.preventDefault()"><i class="bi bi-bar-chart-line"></i><span>Changelog</span></a>
+                <a ngbDropdownItem href="#" (click)="$event.preventDefault()"><i class="bi bi-braces"></i><span>Build from Source</span></a>
+                <hr />
+                <a ngbDropdownItem href="#" (click)="$event.preventDefault()"><i class="bi bi-plus-lg"></i><span>Post New Bug</span></a>
+                <a ngbDropdownItem href="#" (click)="$event.preventDefault()"><i class="bi bi-bug-fill"></i><span>All Open Bugs</span></a>
+                <a ngbDropdownItem href="#" (click)="$event.preventDefault()"><i class="bi bi-diagram-2-fill"></i><span>All Open Pull Requests</span></a>
             </div>
           </li>
         </ul>
-        <div class="d-flex" role="game-menu">
-            <button class="btn btn-secondary" type="submit">Download</button>
-            <button class="btn btn-secondary" type="submit">Servers</button>
-            <button class="btn btn-secondary" type="submit">User</button>
+        <div class="d-flex align-items-center game-menu">
+            <div><button class="btn btn-success">Download</button></div>
+            <div><button class="btn btn-secondary">Servers</button></div>
+            <div class="vr"></div>
+            <div class="nav-item user-menu" ngbDropdown display="dynamic" placement="bottom-end">
+                <a class="nav-link" tabindex="0" ngbDropdownToggle id="nav-user" role="button"> <i class="bi bi-person-fill"></i></a>
+            </div>
         </div>
       </div>
     </div>

@@ -1,0 +1,309 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: The resources used to create the WebApp environment.
+Parameters:
+  Env:
+    AllowedValues:
+      - 'local'
+      - 'dev'
+      - 'qa'
+      - 'stg'
+      - 'prod'
+    Type: String
+    Description: The name for the environment that this cloudformation will be part of.
+    Default: dev
+  UserPoolId:
+    Type: String
+  UserPoolArn:
+    Type: String
+  S3UserUploadName:
+    Type: String
+  DatabaseSecurityGroup:
+    Type: String
+    Description: Security group for database access
+  DatabaseSubnetList:
+    Type: List<AWS::EC2::Subnet::Id>
+    Description: Database subnets to attach API Lambda to
+  DBAdminSecret:
+    Type: String
+  DBClusterArn:
+    Type: String
+  GoogleMapsApiKeyParameterName:
+    Type: AWS::SSM::Parameter::Name
+  ProjectName:
+    Description: Primary project name
+    Type: String
+    Default: 'odamex'
+  ProjectURL:
+    Type: String
+    Default: 'odamex.mathematica-dev.org'
+  WAFArn:
+    Type: String
+
+Conditions:
+  IsStaging: !Equals
+    - !Ref Env
+    - stg
+  IsProd: !Equals
+    - !Ref Env
+    - prod
+  IsNotProd: !Not
+    - !Condition IsProd
+  IsStagingOrProd: !Or
+    - !Condition IsStaging
+    - !Condition IsProd
+
+Mappings:
+  LogLevel:
+    local:
+      level: DEBUG
+    dev:
+      level: DEBUG
+    qa:
+      level: INFO
+    stg:
+      level: INFO
+    prod:
+      level: INFO
+
+Resources:
+  LambdaForProxyRestAPIExecRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      RoleName: !Sub MathRole-LambdaForProxyRestAPIExecRole-${Env}
+      PermissionsBoundary: !Sub arn:aws:iam::${AWS::AccountId}:policy/Math-Boundary-Policy
+      Policies:
+        - PolicyName: !Sub 'MathPolicy-LambdaForProxyRestAPIExecRole-${Env}'
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              # groups are sorted in alphabetical order by service prefix
+              - Effect: Allow
+                Action:
+                  - cognito-idp:AdminCreateUser
+                  - cognito-idp:AdminDeleteUser
+                  - cognito-idp:AdminDisableUser
+                  - cognito-idp:AdminEnableUser
+                  - cognito-idp:AdminGetUser
+                  - cognito-idp:AdminResetUserPassword
+                  - cognito-idp:AdminSetUserMFAPreference
+                  - cognito-idp:AdminUpdateUserAttributes
+                  - cognito-idp:ChangePassword
+                Resource: !Ref UserPoolArn
+              - Effect: Allow
+                Action:
+                  - lambda:InvokeFunction
+                Resource:
+                  - !Sub arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:${Env}-data-quality-checks
+                  - !Sub arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:${Env}-dashboard-data
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: '*'
+              - Effect: Allow
+                Action:
+                  - quicksight:ListDashboards
+                Resource: !Sub arn:aws:quicksight:${AWS::Region}:${AWS::AccountId}:dashboard/*
+              - Effect: Allow
+                Action:
+                  - quicksight:CreateGroupMembership
+                  - quicksight:DescribeUser
+                  - quicksight:GetAuthCode
+                  - quicksight:GenerateEmbedUrlForRegisteredUser
+                  - quicksight:RegisterUser
+                Resource: '*'
+              - Effect: Allow
+                Action:
+                  - rds-data:*
+                Resource: !Ref DBClusterArn
+              - Effect: Allow
+                Action:
+                  - s3:PutObject
+                  - s3:GetObject
+                Resource:
+                  - !Sub
+                    - arn:aws:s3:::${bucketName}/*
+                    - bucketName: !Ref S3UserUploadName
+                  - !Sub
+                    - arn:aws:s3:::${Env}-${ProjectName}-cldb-noa-uploads/*
+                    - bucketName: !Ref S3UserUploadName
+              - Effect: Allow
+                Action:
+                  - secretsmanager:GetSecretValue
+                Resource: !Ref DBAdminSecret
+              - Effect: Allow
+                Action:
+                  - ses:SendTemplatedEmail
+                # We could restrict this to specific email template ARNs, but the CloudFormation docs don't specify
+                # how to get the ARN. The ARNs also aren't displayed in the console OR in the CLI output, so since
+                # this is pretty low risk, just leaving it as * for simplicity.
+                Resource: '*'
+              - Effect: Allow
+                Action:
+                  - ssm:GetParameter
+                Resource: !Sub
+                  - arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter${parameterName}
+                  - parameterName: !Ref GoogleMapsApiKeyParameterName
+
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Sid: ''
+            Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: 'sts:AssumeRole'
+
+  # API App proxy
+  APIProxy:
+    Type: 'AWS::ApiGateway::RestApi'
+    Properties:
+      Name: !Join ['-', [!Ref Env, 'rest-proxy']]
+  APIProxyAuthorizer:
+    Type: AWS::ApiGateway::Authorizer
+    Properties:
+      ProviderARNs:
+        - !Ref UserPoolArn
+      IdentitySource: method.request.header.Authorization
+      Name: !Join ['-', [!Ref Env, 'cognito-authorizer']]
+      RestApiId: !Ref APIProxy
+      Type: COGNITO_USER_POOLS
+  # proxy
+  APIProxyResource:
+    Type: 'AWS::ApiGateway::Resource'
+    Properties:
+      RestApiId: !Ref APIProxy
+      ParentId: !GetAtt APIProxy.RootResourceId
+      PathPart: '{proxy+}'
+  APIProxyResourceMethodMock:
+    Type: 'AWS::ApiGateway::Method'
+    Properties:
+      AuthorizationType: NONE
+      HttpMethod: OPTIONS
+      RestApiId: !Ref APIProxy
+      ResourceId: !Ref APIProxyResource
+      MethodResponses:
+        - ResponseModels:
+            application/json: Empty
+          ResponseParameters:
+            method.response.header.Access-Control-Allow-Origin: true
+            method.response.header.Access-Control-Allow-Methods: true
+            method.response.header.Access-Control-Allow-Headers: true
+          StatusCode: 200
+      Integration:
+        RequestTemplates:
+          application/json: |
+            {"statusCode": 200}
+        Type: MOCK
+        IntegrationResponses:
+          - ResponseParameters:
+              method.response.header.Access-Control-Allow-Origin: "'*'"
+              method.response.header.Access-Control-Allow-Methods: "'DELETE,GET,HEAD,OPTIONS,PATCH,POST,PUT'"
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token'"
+            ResponseTemplates:
+              application/json: ''
+            StatusCode: 200
+        PassthroughBehavior: WHEN_NO_TEMPLATES
+  APIProxyResourceMethodANY:
+    Type: 'AWS::ApiGateway::Method'
+    DependsOn:
+      - APIProxy
+      - LambdaForProxyRestAPI
+    Properties:
+      RestApiId: !Ref APIProxy
+      ResourceId: !Ref APIProxyResource
+      HttpMethod: ANY
+      AuthorizationType: COGNITO_USER_POOLS
+      AuthorizerId: !Ref APIProxyAuthorizer
+      Integration:
+        Type: AWS_PROXY
+        IntegrationHttpMethod: POST
+        Uri: !Sub
+          - arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${lambdaArn}/invocations
+          - lambdaArn: !GetAtt LambdaForProxyRestAPI.Arn
+
+  # Lambda for Proxy API
+  LambdaForProxyRestAPI:
+    Type: 'AWS::Lambda::Function'
+    Properties:
+      FunctionName: !Sub '${Env}-rest-api'
+      Handler: built/index.handler
+      MemorySize: 384
+      Role: !GetAtt LambdaForProxyRestAPIExecRole.Arn
+      Runtime: nodejs20.x
+      Timeout: 600
+      LoggingConfig:
+        ApplicationLogLevel: !FindInMap [LogLevel, !Ref Env, level]
+        LogFormat: JSON
+        SystemLogLevel: !FindInMap [LogLevel, !Ref Env, level]
+      VpcConfig:
+        SecurityGroupIds:
+          - !Ref DatabaseSecurityGroup
+        SubnetIds: !Ref DatabaseSubnetList
+      Environment:
+        Variables:
+          ENV: !Ref Env
+          REGION: !Ref 'AWS::Region'
+          AUTH_USERPOOLID: !Ref UserPoolId
+          S3_USER_UPLOAD: !Ref S3UserUploadName
+          S3_NOA_UPLOAD: !Sub '${Env}-${ProjectName}-cldb-noa-uploads'
+          DB_AdminSecret: !Ref DBAdminSecret
+          DB_ClusterArn: !Ref DBClusterArn
+          GOOGLE_MAPS_API_KEY_PARAMETER_NAME: !Ref GoogleMapsApiKeyParameterName
+          ProjectURL: !Ref ProjectURL
+          ACCOUNT_ID: !Sub ${AWS::AccountId}
+      Code:
+        ZipFile: |
+          // to be deployed
+  LambdaForProxyConfigPermission:
+    Type: 'AWS::Lambda::Permission'
+    DependsOn:
+      - APIProxy
+      - LambdaForProxyRestAPI
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref LambdaForProxyRestAPI
+      Principal: apigateway.amazonaws.com
+
+  APIProxyDeploymentv1:
+    Type: 'AWS::ApiGateway::Deployment'
+    DependsOn:
+      - APIProxyResourceMethodMock
+      - APIProxyResourceMethodANY
+    Properties:
+      RestApiId: !Ref APIProxy
+  APIProxyStage:
+    Type: 'AWS::ApiGateway::Stage'
+    Properties:
+      StageName: !Ref Env
+      Description: !Sub '${Env}-stage'
+      RestApiId: !Ref APIProxy
+      DeploymentId: !Ref APIProxyDeploymentv1
+
+  # WebACL association for Proxy API
+  APIProxyWebACL:
+    Type: AWS::WAFv2::WebACLAssociation
+    DependsOn:
+      - APIProxyStage
+    Properties:
+      ResourceArn: !Sub
+        - arn:aws:apigateway:${AWS::Region}::/restapis/${restApiId}/stages/${Env}
+        - restApiId: !Ref APIProxy
+      WebACLArn: !Ref WAFArn
+
+  APIEmailSESConfigurationSet:
+    Type: AWS::SES::ConfigurationSet
+    Properties:
+      Name: !Sub ${Env}-ses-configuration-set
+      DeliveryOptions:
+        TlsPolicy: REQUIRE
+      SendingOptions:
+        SendingEnabled: true
+
+
+Outputs:
+  APIProxy:
+    Value: !Ref APIProxy
+  APIProxyResource:
+    Value: !Ref APIProxyResource

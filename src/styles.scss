@@ -30,3 +30,38 @@ a:not(.btn), a:not(.btn):visited, a:not(.btn):link {
 .display-block {
     display:block;
 }
+
+/*****************************************/
+/* Bootstrap Override Styles */
+/*****************************************/
+.dropdown-menu {
+    --bs-box-shadow-sm: 0 .125rem .25rem rgba(0, 0, 0, 0.5);
+    --bs-dropdown-rgb: 33, 37, 41;
+    --bs-bg-opacity: 0.9;
+    min-width: 15rem;
+    background-color: RGBA(var(--bs-dropdown-rgb), var(--bs-bg-opacity, 1)) !important;
+
+    a.dropdown-item {
+        color: #FFFFFF;
+        --bs-dropdown-item-padding-y: 0.75rem;
+
+        i.bi {
+            & + span {
+                padding-left: 0.75rem;
+            }
+        }
+
+        &:focus,
+        &:hover {
+            --bs-dropdown-link-hover-bg: rgba(10, 12, 18, 0.8);
+        }
+    }
+}
+
+.dropdown-toggle::after {
+    vertical-align: middle;
+}
+
+i.bi + span {
+    padding-left: 0.5rem;
+}

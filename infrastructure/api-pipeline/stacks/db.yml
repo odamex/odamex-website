@@ -1,0 +1,513 @@
+Parameters:
+  Env:
+    Type: String
+    Default: dev
+    Description: Enter stage (local, dev, staging, prod)
+  DatabaseSubnetList:
+    Type: String
+    Description: Enter at least two subnet IDs for the database cluster
+  VPCDefaultSecurityGroup:
+    Type: String
+    Description: VPC default security group
+  VPCID:
+    Type: AWS::EC2::VPC::Id
+    Description: VPC Id to be attached to the database security group
+  DatabasePort:
+    Type: Number
+    Description: Database port
+    Default: 5000
+
+Conditions:
+  IsLocal: !Equals [!Ref Env, local]
+  IsDev: !Equals [!Ref Env, dev]
+  Production: !Equals [!Ref Env, prod]
+  EnableQuickSight: !Or
+    - !Equals [!Ref Env, dev]
+    - !Equals [!Ref Env, local]
+
+Outputs:
+  DatabaseClusterArnV2:
+    Description: Database cluster ARN
+    Value: !GetAtt DatabaseClusterV2.DBClusterArn
+
+  DBEndpointPortV2:
+    Description: Database Endpoint Port
+    Value: !GetAtt DatabaseClusterV2.Endpoint.Port
+
+  DBAdminPasswordV2:
+    Description: Database master password
+    Value: !Ref DatabasePasswordV2
+    Export:
+      Name: !Sub ${Env}:DBAdminPasswordV2
+
+Resources:
+  DatabaseSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: !Sub ${Env} database security group
+      VpcId: !Ref VPCID
+      SecurityGroupIngress:
+        # Access from CLDB API containers. The CLDB API doesn't have a local environment, so we only want to add
+        # this inbound rule for environments above local.
+        - Fn::If:
+            - IsLocal
+            - !Ref AWS::NoValue
+            - IpProtocol: tcp
+              FromPort: 5000
+              ToPort: 5000
+              SourceSecurityGroupId:
+                Fn::ImportValue: !Sub odamex-clinic-locator-api-${Env}:FargateContainerSecurityGroup
+
+  DatabaseSubnetGroup:
+    Type: AWS::RDS::DBSubnetGroup
+    Properties:
+      DBSubnetGroupDescription: CloudFormation managed DB subnet group.
+      SubnetIds: !Split [',', !Ref DatabaseSubnetList]
+
+  ######## Aurora postgresql serverless v2 upgrade
+  DatabasePasswordV2:
+    Type: 'AWS::SecretsManager::Secret'
+    Properties:
+      Name: !Sub ${Env}DatabasePasswordV2
+      Description: 'Dynamically generated secret password for Odamex database'
+      GenerateSecretString:
+        SecretStringTemplate: '{"username": "db_admin"}'
+        GenerateStringKey: 'password'
+        PasswordLength: 41
+        ExcludeCharacters: "@'/\"\\"
+
+  DatabasePasswordCldbV2:
+    Type: 'AWS::SecretsManager::Secret'
+    Properties:
+      Name: !Sub ${Env}DatabasePasswordCldbV2
+      Description: 'Dynamically generated secret password for Odamex database - CLDB public API'
+      GenerateSecretString:
+        SecretStringTemplate: '{"username": "cldb_public"}'
+        GenerateStringKey: 'password'
+        PasswordLength: 41
+        ExcludeCharacters: "@'/\"\\"
+
+  EnhancedMonitoringRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub MathRole-DatabaseEnhancedMonitoringRole-${Env}
+      AssumeRolePolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: [monitoring.rds.amazonaws.com]
+            Action: ['sts:AssumeRole']
+      Path: /
+      Policies:
+        - PolicyName: !Sub MathPolicy-DatabaseEnhancedMonitoringPolicy-${Env}
+          PolicyDocument:
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 'logs:CreateLogGroup'
+                  - 'logs:PutRetentionPolicy'
+                  - 'logs:CreateLogStream'
+                  - 'logs:PutLogEvents'
+                  - 'logs:DescribeLogStreams'
+                  - 'logs:GetLogEvents'
+                Resource: '*'
+
+  DatabaseClusterParameterGroupV2:
+    Type: AWS::RDS::DBClusterParameterGroup
+    Properties:
+      Description: 'DB cluster parameter group'
+      Family: aurora-postgresql16
+      Parameters:
+        log_connections: yes
+        timezone: US/Eastern
+        statement_timeout: 900000
+
+  DatabaseClusterV2:
+    Type: AWS::RDS::DBCluster
+    Properties:
+      DatabaseName: odamex
+      BackupRetentionPeriod: !If [Production, 30, 7]
+      CopyTagsToSnapshot: true
+      DBClusterParameterGroupName: !Ref DatabaseClusterParameterGroupV2
+      DBSubnetGroupName: !Ref DatabaseSubnetGroup
+      DeletionProtection: true
+      EnableCloudwatchLogsExports:
+        - postgresql
+      EnableIAMDatabaseAuthentication: true
+      Engine: aurora-postgresql
+      EngineVersion: 16.4
+      EnableHttpEndpoint: true
+      MasterUsername: !Sub '{{resolve:secretsmanager:${DatabasePasswordV2}::username}}'
+      MasterUserPassword: !Sub '{{resolve:secretsmanager:${DatabasePasswordV2}::password}}'
+      MasterUserSecret:
+        SecretArn: !Ref DatabasePasswordV2
+      Port: 5000
+      PreferredBackupWindow: 01:00-02:00
+      PreferredMaintenanceWindow: mon:03:00-mon:04:00
+      ServerlessV2ScalingConfiguration:
+        MaxCapacity: 64
+        MinCapacity: 0.5
+      StorageEncrypted: true
+      VpcSecurityGroupIds:
+        - !Ref DatabaseSecurityGroup
+
+  DatabaseInstanceV2:
+    Type: AWS::RDS::DBInstance
+    Properties:
+      CACertificateIdentifier: rds-ca-rsa2048-g1
+      DBClusterIdentifier: !Ref DatabaseClusterV2
+      DBInstanceClass: db.serverless
+      Engine: aurora-postgresql
+      MonitoringInterval: 15
+      MonitoringRoleArn: !GetAtt EnhancedMonitoringRole.Arn
+      EnablePerformanceInsights: true
+
+  SecretRDSInstanceAttachmentV2:
+    Type: 'AWS::SecretsManager::SecretTargetAttachment'
+    Properties:
+      SecretId: !Ref DatabasePasswordV2
+      TargetId: !Ref DatabaseClusterV2
+      TargetType: AWS::RDS::DBCluster
+
+  SecretRDSInstanceAttachmentCLDBV2:
+    Type: 'AWS::SecretsManager::SecretTargetAttachment'
+    Properties:
+      SecretId: !Ref DatabasePasswordCldbV2
+      TargetId: !Ref DatabaseClusterV2
+      TargetType: AWS::RDS::DBCluster
+
+  DatabaseScalerLambdaExecRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      RoleName: !Sub MathRole-DatabaseScalerLambdaExecRole-${Env}
+      Policies:
+        - PolicyName: !Sub 'MathPolicy-DatabaseScalerLambdaExecRole-${Env}'
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 'rds:ModifyDBCluster'
+                Resource: !GetAtt ['DatabaseClusterV2', 'DBClusterArn']
+              - Effect: Allow
+                Action:
+                  - 'logs:CreateLogGroup'
+                  - 'logs:CreateLogStream'
+                  - 'logs:PutLogEvents'
+                  - 'cloudtrail:*'
+                Resource: '*'
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Sid: ''
+            Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: 'sts:AssumeRole'
+          - Sid: ''
+            Effect: Allow
+            Principal:
+              Service: cloudtrail.amazonaws.com
+            Action: 'sts:AssumeRole'
+
+  DatabaseScalerLambda:
+    Type: 'AWS::Lambda::Function'
+    DependsOn: DatabaseScalerLambdaExecRole
+    Properties:
+      FunctionName: !Sub '${Env}-database-scaler'
+      Handler: index.handler
+      MemorySize: 128
+      Role: !GetAtt ['DatabaseScalerLambdaExecRole', 'Arn']
+      Runtime: nodejs22.x
+      Timeout: 20
+      Environment:
+        Variables:
+          DBClusterIdentifier: !Ref DatabaseClusterV2
+          AwsRegion: !Ref AWS::Region
+      Code:
+        ZipFile: |
+          const { RDSClient, ModifyDBClusterCommand } = require("@aws-sdk/client-rds");
+          const client = new RDSClient({ region: process.env.AwsRegion });
+
+          exports.handler = async (event) => {
+            const date = new Date();
+            const utcHours = date.getUTCHours();
+            const utcDay = date.getUTCDay();
+
+            // scale up if:
+            // PST (not PDT): Monday-Friday, 7 AM to 9 AM
+            // UTC: Monday-Friday 3 PM to 5 PM UTC
+            const scaleUp = (utcDay >= 1 && utcDay <= 5) && (utcHours >= 15 && utcHours < 17);
+
+            // scale down if:
+            // PST (not PDT): Monday-Friday, 6 PM to 8 PM
+            // UTC: Tuesday-Saturday 1 AM to 3 AM
+            const scaleDown = (utcDay >= 2 && utcDay <= 6) && (utcHours >= 1 && utcHours < 3);
+
+            // confirm either scaleUp or scaleDown is true, to avoid logic
+            // getting wonky if the function gets run manually at a time when
+            // no scaling is actually necessary
+            if (scaleUp || scaleDown) {
+              const minCapacity = scaleUp ? 64 : 0.5;
+
+              const params = {
+                DBClusterIdentifier: process.env.DBClusterIdentifier,
+                ServerlessV2ScalingConfiguration: {
+                  MinCapacity: minCapacity,
+                  MaxCapacity: 64
+                }
+              };
+
+              try {
+                const command = new ModifyDBClusterCommand(params);
+                await client.send(command);
+                console.log(`Successfully scaled DB cluster to min capacity: ${minCapacity}`);
+              } catch (error) {
+                console.error(`Error scaling DB cluster: ${error}`);
+              }
+            } else {
+              console.log("No scaling necessary at this time");
+            }
+          };
+
+  DatabaseScalerLambdaPermissions:
+    Type: 'AWS::Lambda::Permission'
+    Condition: Production
+    DependsOn:
+      - DatabaseScalerLambda
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !GetAtt ['DatabaseScalerLambda', 'Arn']
+      Principal: events.amazonaws.com
+
+  DatabaseScalerLambdaEventRuleRole:
+    Type: AWS::IAM::Role
+    Condition: Production
+    DependsOn:
+      - DatabaseScalerLambda
+    Properties:
+      Description: 'Role used to execute lambda on event/schedule'
+      RoleName: !Sub MathRole-DatabaseScalerLambdaEventRuleRole-${Env}
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: 'Allow'
+            Principal:
+              Service:
+                - 'events.amazonaws.com'
+            Action:
+              - 'sts:AssumeRole'
+      Policies:
+        - PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: 'Allow'
+                Action:
+                  - 'lambda:InvokeFunction'
+                Resource:
+                  - !GetAtt ['DatabaseScalerLambda', 'Arn']
+              - Effect: 'Allow'
+                Action:
+                  - 'iam:PassRole'
+                Resource:
+                  - '*'
+                Condition:
+                  StringLike:
+                    'iam:PassedToService': 'lambda.amazonaws.com'
+          PolicyName: !Sub EventRuleInvokeDatabaseScalerLambda-${Env}
+
+  DatabaseScalerLambdaEventRule:
+    Type: AWS::Events::Rule
+    Condition: Production
+    DependsOn:
+      - DatabaseScalerLambdaExecRole
+      - DatabaseScalerLambda
+    Properties:
+      Description: 'Rule that triggers the database scaler lambda function (up 8am-6pm PST, Jan/Feb 2025, down otherwise)'
+      Name: !Sub DatabaseScalerLambdaEventRule-${Env}
+      RoleArn: !GetAtt ['DatabaseScalerLambdaEventRuleRole', 'Arn']
+      # current expression is set to run every Monday-Friday at 8am and 6pm PST
+      # 00 minutes
+      # hours 2 and 16 UTC (6pm and 8am PST, respectively)
+      # ignore day of the month
+      # January/February
+      # Monday-Saturday UTC (days 2-7 of week starting on Sunday, accounts for 6pm PST on Friday being Saturday UTC)
+      # 2025 (not sure we want this to continue to next year automatically - would need to revisit dates anyways)
+      ScheduleExpression: 'cron(0 2,16 ? 1,2 2-7 2025)'
+      State: ENABLED
+      Targets:
+        - Arn: !GetAtt ['DatabaseScalerLambda', 'Arn']
+          Id: !Sub DatabaseScalerLambdaEventRuleTarget-${Env}
+
+  ## Create security group for quick sight within the same VPC as the database
+  ## VPC connection for quicksight itself will be set up manually through
+  ## Quicksight console
+  QuickSightSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Condition: EnableQuickSight
+    Properties:
+      GroupName: !Sub Odamex-${Env}-quicksight-dashboard
+      GroupDescription: Access Database Server from QuickSight
+      VpcId: !Ref VPCID
+
+  ## Now create rules for RDS security group and Quicksight security group
+  ## to allow them to communicate
+  ## Requests from QuickSite to the db port can enter the RDS security group
+  DatabaseSecurityGroupIngress:
+    Type: AWS::EC2::SecurityGroupIngress
+    Condition: EnableQuickSight
+    Properties:
+      GroupId: !GetAtt DatabaseSecurityGroup.GroupId
+      Description: 'QuickSight access to DB cluster'
+      SourceSecurityGroupId: !GetAtt QuickSightSecurityGroup.GroupId
+      IpProtocol: tcp
+      FromPort: !Ref DatabasePort
+      ToPort: !Ref DatabasePort
+
+  ## requests from RDS to any port can enter the QuickSight security group
+  ## note that RDS security group has no exgress rules specified (besides the default)
+  ## so all outbound requests are enabled
+  ## no need to add a rule to enable outbound RDS requests to quicksight
+  QuickSightSecurityGroupIngress:
+    Type: AWS::EC2::SecurityGroupIngress
+    Condition: EnableQuickSight
+    Properties:
+      Description: 'All TCP from database security group to QuickSight'
+      GroupId: !GetAtt QuickSightSecurityGroup.GroupId
+      IpProtocol: tcp
+      ## full port range
+      FromPort: 0
+      ToPort: 65535
+      SourceSecurityGroupId: !GetAtt DatabaseSecurityGroup.GroupId
+
+  ## Enable QuickSite to send requests on the db port to the database
+  QuickSightSecurityGroupEgress:
+    Type: AWS::EC2::SecurityGroupEgress
+    Condition: EnableQuickSight
+    Properties:
+      Description: 'QuickSight access to DB cluster'
+      GroupId: !GetAtt QuickSightSecurityGroup.GroupId
+      IpProtocol: tcp
+      FromPort: !Ref DatabasePort
+      ToPort: !Ref DatabasePort
+      DestinationSecurityGroupId: !GetAtt DatabaseSecurityGroup.GroupId
+
+  ## add ReadOnly password and secret for QuickSite users
+  DatabasePasswordQuickSight:
+    Type: 'AWS::SecretsManager::Secret'
+    Condition: EnableQuickSight
+    Properties:
+      Name: !Sub ${Env}DatabasePasswordQuickSight
+      Description: 'Dynamically generated secret password for Odamex database - Read-only QuickSight'
+      GenerateSecretString:
+        SecretStringTemplate: '{"username": "dashboard_dev"}'
+        GenerateStringKey: 'password'
+        PasswordLength: 41
+        ExcludeCharacters: "@'/\"\\"
+
+  SecretRDSInstanceAttachmentQuickSight:
+    Type: 'AWS::SecretsManager::SecretTargetAttachment'
+    Condition: EnableQuickSight
+    Properties:
+      SecretId: !Ref DatabasePasswordQuickSight
+      TargetId: !Ref DatabaseClusterV2
+      TargetType: AWS::RDS::DBCluster
+
+  QuickSightLambdaSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: !Sub Odamex-${Env}-quicksight-views
+      GroupDescription: Access Database Server from QuickSight view lambda 
+      VpcId: !Ref VPCID
+
+  ## Allow database to receive connections from QuickSight view lambda
+  DatabaseSecurityGroupIngressQuickSightLambda:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !Ref DatabaseSecurityGroup
+      Description: 'QuickSight lambda access to DB cluster'
+      SourceSecurityGroupId: !Ref QuickSightLambdaSecurityGroup
+      IpProtocol: tcp
+      FromPort: !Ref DatabasePort
+      ToPort: !Ref DatabasePort
+
+  ## Allow QuickSight lambda security group to receive messages from RDS server
+  QuickSightLambdaSecurityGroupIngress:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      Description: 'All TCP from database security group to QuickSight lambda'
+      GroupId: !Ref QuickSightLambdaSecurityGroup
+      SourceSecurityGroupId: !Ref DatabaseSecurityGroup 
+      IpProtocol: tcp
+      ## full port range
+      FromPort: 0
+      ToPort: 65535
+
+  ## Restrict QuickSight lambda to sending messages to the RDS server 
+  ## exgress default is all, so by adding a rule, we are restricting 
+  ## For communicating with other resources, the AWS api can be used 
+  QuickSightLambdaSecurityGroupEgress:
+    Type: AWS::EC2::SecurityGroupEgress
+    Properties:
+      Description: 'QuickSight lambda access to DB cluster'
+      GroupId: !Ref QuickSightLambdaSecurityGroup
+      DestinationSecurityGroupId: !Ref DatabaseSecurityGroup
+      IpProtocol: tcp
+      FromPort: !Ref DatabasePort
+      ToPort: !Ref DatabasePort
+
+  ## Allow outbound IPv6 and IPv4 
+  ## This will be routed to the transit gateway if placed in the private subnets 
+  ## This enables use of AWS API in lambda which is in a VPC 
+  QuickSightLambdaSecurityGroupEgressIPv6:
+    Type: AWS::EC2::SecurityGroupEgress
+    Properties:
+      GroupId: !Ref QuickSightLambdaSecurityGroup
+      IpProtocol: -1
+      CidrIpv6: "::/0"
+
+  QuickSightLambdaSecurityGroupEgressIPv4:
+    Type: AWS::EC2::SecurityGroupEgress
+    Properties:
+      GroupId: !Ref QuickSightLambdaSecurityGroup
+      IpProtocol: -1
+      CidrIp: "0.0.0.0/0"
+  
+  # An SNS topic for sending notifications when the database ACU level remains unexpectedly high for a long time
+  DatabaseAcuAlarmTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      DisplayName: !Sub odamex-${Env}-database-acu-alarm-topic
+      Subscription:
+        - Endpoint: AWS-51095OdamexDev@mathematica-mpr.com
+          Protocol: email
+      TopicName: !Sub odamex-${Env}-database-acu-alarm-topic
+      Tags:
+        - Key: ProjectName
+          Value: odamex
+
+  # CloudWatch alarm for when the database ACU level remains unexpectedly high for a long time
+  DatabaseAcuAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      ActionsEnabled: true
+      AlarmActions:
+        - !Ref DatabaseAcuAlarmTopic
+      AlarmDescription: Sends SNS notification when database ACU level remains higher than expected
+      AlarmName: !Sub odamex-${Env}-CloudWatch-Database-ACU-Alarm
+      ComparisonOperator: GreaterThanThreshold
+      DatapointsToAlarm: 3
+      Dimensions:
+        - Name: DBClusterIdentifier
+          Value: !Ref DatabaseClusterV2
+      EvaluationPeriods: 3
+      MetricName: ServerlessDatabaseCapacity
+      Namespace: AWS/RDS
+      Period: 86400
+      Statistic: Average
+      Tags:
+        - Key: ProjectName
+          Value: odamex
+      Threshold: 2
+      TreatMissingData: missing
+      Unit: None

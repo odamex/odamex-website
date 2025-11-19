@@ -1,0 +1,751 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: Cognito Stack
+Parameters:
+  Env:
+    Type: String
+    Description: Environment name for cognito resources
+    Default: dev
+  ProjectURL:
+    Type: String
+    Default: "odamex.mathematica-dev.org"
+  BurpSuiteParamName:
+    Type: AWS::SSM::Parameter::Name
+    Default: "/burpsuite/user"
+  EmailInvitationSubject:
+    Type: String
+    Default: >
+      Family Planning Annual Report: Your User Account
+  DBAdminSecret:
+    Type: String
+  DBClusterArn:
+    Type: String
+  ReplyToEmailAddress:
+    Type: String
+    Default: "FPARSupport@mathematica-mpr.com"
+  EmailDomainSourceArn:
+    Type: String
+    Default: ""
+
+Conditions:
+  IsLocal: !Equals
+    - !Ref Env
+    - local
+  IsDev: !Equals
+    - !Ref Env
+    - dev
+  IsQa: !Equals
+    - !Ref Env
+    - qa
+  IsStaging: !Equals
+    - !Ref Env
+    - stg
+  # Note: we only run the Burpsuite security scan in the dev environment, so
+  # theoretically we should only need the security scan resources in dev.
+  # However, when testing, we found that the custom auth lambdas were enabled
+  # for the local and qa environment, and removing them from the local user pool
+  # broke the authentication process. The stg environment does not have those
+  # custom auth lambdas, so they are not essential, but we don't necessarily
+  # have time to track down exactly why they're in place and required for local/qa.
+  # So this approach applies the resoures to all of local/dev/qa, to keep things
+  # working.
+  CreateSecurityScanResources: !Or
+    - !Condition IsLocal
+    - !Condition IsDev
+    - !Condition IsQa
+    - !Condition IsStaging
+  HasDefaultEmail: !Equals
+    - !Ref EmailDomainSourceArn
+    - ""
+
+Resources:
+  SNSRole:
+    Type: "AWS::IAM::Role"
+    Properties:
+      RoleName: !Sub MathRole-SNSRole-${Env}
+      PermissionsBoundary: !Sub arn:aws:iam::${AWS::AccountId}:policy/Math-Boundary-Policy
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - cognito-idp.amazonaws.com
+            Action:
+              - "sts:AssumeRole"
+      Policies:
+        - PolicyName: !Sub MathPolicy-CognitoSNSPolicy-${Env}
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action: "sns:publish"
+                Resource: "*"
+
+  # This section defines an execution role and Lambda functions called by Cognito to manage
+  # actions and additional custom logic during the authentication process. This was originally
+  # developed to allow Burpsuite test accounts to bypass MFA, but we will also use it
+  # to add custom logic to the account lockout feature to meet FedRAMP requirements.
+  CognitoAuthLambdasRole:
+    Type: "AWS::IAM::Role"
+    Properties:
+      RoleName: !Sub MathRole-CognitoLambdasRole-${Env}
+      PermissionsBoundary: !Sub arn:aws:iam::${AWS::AccountId}:policy/Math-Boundary-Policy
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: !Sub MathPolicy-CognitoAuthorizedPolicy-${Env}
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - cognito-identity:*
+                  - cognito-idp:*
+                  - cognito-sync:*
+                  - iam:ListRoles
+                  - iam:ListOpenIdConnectProviders
+                  - iam:GetRole
+                  - iam:ListSAMLProviders
+                  - iam:GetSAMLProvider
+                  - kinesis:ListStreams
+                  - lambda:GetPolicy
+                  - lambda:ListFunctions
+                  - sns:GetSMSSandboxAccountStatus
+                  - sns:ListPlatformApplications
+                  - ses:ListIdentities
+                  - ses:GetIdentityVerificationAttributes
+                  - mobiletargeting:GetApps
+                  - acm:ListCertificates
+                  - secretsmanager:GetSecretValue
+                  - ssm:GetParameter
+                Resource: "*"
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: "*"
+              - Effect: Allow
+                Action: iam:CreateServiceLinkedRole
+                Resource: "*"
+                Condition:
+                  StringEquals:
+                    "iam:AWSServiceName":
+                      - "cognito-idp.amazonaws.com"
+                      - "email.cognito-idp.amazonaws.com"
+              - Effect: Allow
+                Action:
+                  - iam:DeleteServiceLinkedRole
+                  - iam:GetServiceLinkedRoleDeletionStatus
+                Resource:
+                  - "arn:aws:iam::*:role/aws-service-role/cognito-idp.amazonaws.com/AWSServiceRoleForAmazonCognitoIdp*"
+                  - "arn:aws:iam::*:role/aws-service-role/email.cognito-idp.amazonaws.com/AWSServiceRoleForAmazonCognitoIdpEmail*"
+              - Effect: Allow
+                Action: "rds-data:*"
+                # RDS db cluster ARNs are not directly available - need to be constructed.
+                # See https://docs.aws.amazon.com/AmazonRDS/latest/AuroraUserGuide/USER_Tagging.ARN.html
+                # So for now, leaving it out to save time. But ideally this would specify
+                # this environment's db cluster only.
+                Resource: "*"
+              - Effect: Allow
+                Action: "rds:DescribeDBClusters"
+                # Same issue described above, we can't get the cluster ARN directly from the stack,
+                # so granting access to describe attributes of all clusters.
+                Resource: "*"
+
+  CognitoUnAuthorizedRole:
+    Type: "AWS::IAM::Role"
+    Properties:
+      RoleName: !Sub MathRole-CognitoUnAuthorizedRole-${Env}
+      PermissionsBoundary: !Sub arn:aws:iam::${AWS::AccountId}:policy/Math-Boundary-Policy
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Federated: cognito-identity.amazonaws.com
+            Action:
+              - "sts:AssumeRoleWithWebIdentity"
+            Condition:
+              StringEquals:
+                "cognito-identity.amazonaws.com:aud": !Ref IdentityPool
+              "ForAnyValue:StringLike":
+                "cognito-identity.amazonaws.com:amr": unauthenticated
+      Policies:
+        - PolicyName: !Sub MathPolicy-CognitoUnauthorizedPolicy-${Env}
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - "mobileanalytics:PutEvents"
+                  - "cognito-sync:*"
+                Resource: "*"
+
+  CognitoAuthorizedRole:
+    Type: "AWS::IAM::Role"
+    Properties:
+      RoleName: !Sub MathRole-CognitoAuthorizedRole-${Env}
+      PermissionsBoundary: !Sub arn:aws:iam::${AWS::AccountId}:policy/Math-Boundary-Policy
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Federated: cognito-identity.amazonaws.com
+            Action:
+              - "sts:AssumeRoleWithWebIdentity"
+            Condition:
+              StringEquals:
+                "cognito-identity.amazonaws.com:aud": !Ref IdentityPool
+              "ForAnyValue:StringLike":
+                "cognito-identity.amazonaws.com:amr": authenticated
+      Policies:
+        - PolicyName: !Sub MathPolicy-CognitoAuthorizedPolicy-${Env}
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - "mobileanalytics:PutEvents"
+                  - "cognito-sync:*"
+                  - "cognito-identity:*"
+                Resource: "*"
+
+  LambdaCreateAuthChallenge:
+    Type: "AWS::Lambda::Function"
+    Condition: CreateSecurityScanResources
+    Properties:
+      FunctionName: !Sub "${Env}-create-auth-challenge"
+      Handler: index.handler
+      MemorySize: 128
+      Role: !GetAtt CognitoAuthLambdasRole.Arn
+      Runtime: nodejs22.x
+      Timeout: 3
+      Code:
+        ZipFile: |
+          exports.handler = (event, context, callback) => {
+            // console.log('event.request', event.request)
+            if (event.request.challengeName == 'CUSTOM_CHALLENGE') {
+                event.response.publicChallengeParameters = {};
+                event.response.publicChallengeParameters.authUserCode = 'User code'
+                event.response.privateChallengeParameters = {};
+                event.response.privateChallengeParameters.answer = event.request.userAttributes['custom:metadata'];
+                event.response.challengeMetadata = 'USERCODE_CHALLENGE';
+            }
+            callback(null, event);
+          }
+
+  LambdaDefineAuthChallenge:
+    Type: "AWS::Lambda::Function"
+    Condition: CreateSecurityScanResources
+    Properties:
+      FunctionName: !Sub "${Env}-define-auth-challenge"
+      Handler: index.handler
+      MemorySize: 128
+      Role: !GetAtt CognitoAuthLambdasRole.Arn
+      Runtime: nodejs22.x
+      Timeout: 3
+      Environment:
+        Variables:
+          BURP_SUITE_PARAM_NAME: !Ref BurpSuiteParamName
+      Code:
+        ZipFile: |
+          // define_auth_challenge_lambda with parameter store integration
+          import { SSMClient, GetParameterCommand } from '@aws-sdk/client-ssm';
+
+          export const handler = async (event) => {
+            // console.log('event.request', event);
+
+            try {
+              if (
+                event.request.session.length == 1 &&
+                event.request.session[0].challengeName == 'SRP_A'
+              ) {
+                event.response.issueTokens = false;
+                event.response.failAuthentication = false;
+                event.response.challengeName = 'PASSWORD_VERIFIER';
+              } else if (
+                event.request.session.length == 2 &&
+                event.request.session[1].challengeName == 'PASSWORD_VERIFIER' &&
+                event.request.session[1].challengeResult == true
+              ) {
+                const client = new SSMClient();
+                const input = {
+                  Name: process.env.BURP_SUITE_PARAM_NAME,
+                };
+                const command = new GetParameterCommand(input);
+                const response = await client.send(command);
+                const securityScanUsers = response.Parameter.Value;
+                // console.log(' -- securityScanUser: ', securityScanUsers);
+
+                if (
+                  securityScanUsers.split(',').includes(event.request.userAttributes.sub)
+                ) {
+                  event.response.issueTokens = false;
+                  event.response.failAuthentication = false;
+                  event.response.challengeName = 'CUSTOM_CHALLENGE';
+                } else {
+                  event.response.issueTokens = true;
+                  event.response.failAuthentication = false;
+                  event.response.challengeName = 'SELECT_MFA_TYPE';
+                }
+              } else if (
+                event.request.session.length == 3 &&
+                event.request.session[2].challengeName == 'CUSTOM_CHALLENGE' &&
+                event.request.session[2].challengeResult == true
+              ) {
+                event.response.issueTokens = true;
+                event.response.failAuthentication = false;
+                // adding MFA just in case
+              } else if (
+                event.request.session.length >= 3 &&
+                (event.request.session[event.request.session.length - 1].challengeName == 'SMS_MFA' ||
+                  event.request.session[event.request.session.length - 1].challengeName == 'SOFTWARE_TOKEN_MFA') &&
+                event.request.session[event.request.session.length - 1].challengeResult == true
+              ) {
+                event.response.issueTokens = true;
+                event.response.failAuthentication = false;
+              } else {
+                event.response.issueTokens = false;
+                event.response.failAuthentication = true;
+              }
+            } catch (error) {
+              console.error(error, error.stack);
+            }
+
+            // console.log('event.response: ', event.response);
+            return event;
+          };
+
+  LambdaCustomEmails:
+    Type: "AWS::Lambda::Function"
+    Properties:
+      FunctionName: !Sub "${Env}-custom-emails"
+      Handler: index.handler
+      MemorySize: 128
+      Role: !GetAtt CognitoAuthLambdasRole.Arn
+      Runtime: nodejs22.x
+      Timeout: 3
+      Environment:
+        Variables:
+          ProjectURL: !Ref ProjectURL
+      Code:
+        ZipFile: |
+          exports.handler = async (event) => {
+            const code = event.request.codeParameter;
+            const url = process.env.ProjectURL;
+            if (event.triggerSource === "CustomMessage_ForgotPassword") {
+              let message = `<p>Dear FPAR user:</p> 
+                             <p>Your password reset code is ${code}</p>
+                              <p>Still having trouble signing in to <a href="https://${url}">Odamex</a>?
+                              Please contact the help desk at <a href="mailto:FPARSupport@mathematica-mpr.com">FPARSupport@mathematica-mpr.com</a> as needed.</p>`;
+              event.response.emailMessage = message;
+            }
+            return event;
+          };
+
+  LambdaVerifyAuthChallenge:
+    Type: "AWS::Lambda::Function"
+    Condition: CreateSecurityScanResources
+    Properties:
+      FunctionName: !Sub "${Env}-verify-auth-challenge"
+      Handler: index.handler
+      MemorySize: 128
+      Role: !GetAtt CognitoAuthLambdasRole.Arn
+      Runtime: nodejs22.x
+      Timeout: 3
+      Code:
+        ZipFile: |
+          exports.handler = (event, context, callback) => {
+            // console.log('event is: ', event)
+            // console.log('event request: ', event.request)
+            // console.log('event response before: ', event.response)
+            if (event.request.privateChallengeParameters.answer == event.request.challengeAnswer) {
+                event.response.answerCorrect = true;
+            } else {
+                event.response.answerCorrect = false;
+            }
+            // console.log('event response after: ', event.response)
+            callback(null, event);
+          }
+
+  UserPool:
+    Type: "AWS::Cognito::UserPool"
+    Properties:
+      UserPoolName: !Sub "${Env}-user-pool"
+      AccountRecoverySetting:
+        RecoveryMechanisms:
+          - Name: verified_email
+            Priority: 1
+      AdminCreateUserConfig:
+        AllowAdminCreateUserOnly: True
+        InviteMessageTemplate:
+          EmailMessage: !Sub >
+            <html>
+            <body>
+            <font face="Calibri,sans-serif">
+            <p>Dear FPAR user:</p>
+            <p>An account for the Family Planning Annual Report (FPAR) 2.0 system was created for you.
+            To connect to Odamex:</p>
+            <ol style="margin-top:0;margin-bottom:0;">
+            <li style="margin-bottom:10pt;">Navigate to <a href="https://${ProjectURL}">https://${ProjectURL}</a>.
+            For the best experience, we recommend using Chrome, Edge, or Firefox.</li>
+            <li style="margin-bottom:10pt;">Use the following credentials to log on:</li>
+            </ol>
+            <p style="margin:14pt 0 12pt 50pt;">
+            Username: <b>{username}</b><br>
+            Password: <b>{####}</b>
+            </p>
+            <ol start="3" style="margin-top:0;margin-bottom:0;">
+            <li>When you log on to Odamex for the first time, you will be prompted to change your
+            password and select your multifactor authentication method to verify your identity on 
+            subsequent log-ins.</li>
+            </ol>
+            <h4>How can I learn more about how to use the Odamex system?</h4>
+            <p>The Odamex User Guide provides step-by step guidance for using the system. You can 
+            access the User Guide by signing in to the system and clicking the <strong>User Guide</strong> button on 
+            the left side of the screen.</p>
+            <h4>Where can I find more information?</h4>
+            <p>You can find more information about Odamex here: <a href="https://opa.hhs.gov/research-evaluation/title-x-services-research/family-planning-annual-report/odamex">
+            Family Planning Annual Report (FPAR) 2.0 | HHS Office of Population Affairs</a>.</p>
+            <p>Still have a question? Please contact the help desk at <a href="mailto:FPARSupport@mathematica-mpr.com">FPARSupport@mathematica-mpr.com</a> as needed.</p>
+            </body>
+            </html>
+          EmailSubject: !Ref EmailInvitationSubject
+      AutoVerifiedAttributes:
+        - email
+      Policies:
+        PasswordPolicy:
+          MinimumLength: 8
+          TemporaryPasswordValidityDays: 60
+          RequireLowercase: true
+          RequireNumbers: true
+          RequireSymbols: true
+          RequireUppercase: true
+      # UsernameAttributes:
+      #   - email
+      # UsernameConfiguration:
+      #   CaseSensitive: false
+      EnabledMfas:
+        - SMS_MFA
+        - SOFTWARE_TOKEN_MFA
+      LambdaConfig:
+        CreateAuthChallenge: !If
+          - CreateSecurityScanResources
+          - !GetAtt LambdaCreateAuthChallenge.Arn
+          - !Ref "AWS::NoValue"
+        CustomMessage: !GetAtt LambdaCustomEmails.Arn
+        DefineAuthChallenge: !If
+          - CreateSecurityScanResources
+          - !GetAtt LambdaDefineAuthChallenge.Arn
+          - !Ref "AWS::NoValue"
+        VerifyAuthChallengeResponse: !If
+          - CreateSecurityScanResources
+          - !GetAtt LambdaVerifyAuthChallenge.Arn
+          - !Ref "AWS::NoValue"
+        PreAuthentication: !GetAtt LambdaPrePostAuthTrigger.Arn
+        PostAuthentication: !GetAtt LambdaPrePostAuthTrigger.Arn
+      MfaConfiguration: OPTIONAL
+      SmsAuthenticationMessage: "Your FPAR authentication code is {####}"
+      SmsVerificationMessage: "Your FPAR verification code is {####}"
+      SmsConfiguration:
+        ExternalId: !Sub "${Env}-external"
+        SnsCallerArn: !GetAtt SNSRole.Arn
+      Schema:
+        - Name: name
+          AttributeDataType: String
+          Mutable: true
+          Required: true
+        - Name: family_name
+          AttributeDataType: String
+          Mutable: true
+          Required: true
+        - Name: email
+          AttributeDataType: String
+          Mutable: true
+          Required: true
+        - Name: phone_number
+          AttributeDataType: String
+          Mutable: true
+          Required: false
+        - Name: metadata
+          AttributeDataType: String
+          Mutable: true
+          StringAttributeConstraints:
+            MaxLength: 2048
+        - Name: last_login
+          AttributeDataType: String
+          Mutable: true
+          Required: false
+          StringAttributeConstraints:
+            MinLength: 1
+            MaxLength: 2048
+      EmailConfiguration:
+        EmailSendingAccount: !If [HasDefaultEmail, COGNITO_DEFAULT, DEVELOPER]
+        From: !Sub "FPAR System <no-reply@${ProjectURL}>"
+        ReplyToEmailAddress: !Ref ReplyToEmailAddress
+        SourceArn:
+          !If [HasDefaultEmail, !Ref AWS::NoValue, !Ref EmailDomainSourceArn]
+
+  UserPoolAdminGroup:
+    Type: AWS::Cognito::UserPoolGroup
+    Properties:
+      Description: Mathematica admins group
+      GroupName: Admins
+      Precedence: 0
+      # RoleArn: String
+      UserPoolId: !Ref UserPool
+
+  UserPoolClient:
+    Type: "AWS::Cognito::UserPoolClient"
+    Properties:
+      ClientName: !Sub "${Env}-client"
+      GenerateSecret: false
+      UserPoolId: !Ref UserPool
+      AuthSessionValidity: 6
+
+  IdentityPool:
+    Type: "AWS::Cognito::IdentityPool"
+    Properties:
+      IdentityPoolName: !Sub "${Env}Identity"
+      AllowUnauthenticatedIdentities: true
+      CognitoIdentityProviders:
+        - ClientId: !Ref UserPoolClient
+          ProviderName: !GetAtt UserPool.ProviderName
+
+  IdentityPoolRoleMapping:
+    Type: "AWS::Cognito::IdentityPoolRoleAttachment"
+    Properties:
+      IdentityPoolId: !Ref IdentityPool
+      Roles:
+        authenticated: !GetAtt CognitoAuthorizedRole.Arn
+        unauthenticated: !GetAtt CognitoUnAuthorizedRole.Arn
+
+  LambdaPrePostAuthTrigger:
+    Type: "AWS::Lambda::Function"
+    Properties:
+      FunctionName: !Sub "${Env}-pre-post-auth-trigger"
+      Handler: index.lambda_handler
+      MemorySize: 128
+      Role: !GetAtt CognitoAuthLambdasRole.Arn
+      Runtime: python3.13
+      Timeout: 10
+      Environment:
+        Variables:
+          ENV: !Ref Env
+          DB_AdminSecret: !Ref DBAdminSecret
+          DB_ClusterArn: !Ref DBClusterArn
+      Code:
+        ZipFile: |
+          import boto3
+          import os
+
+          #### See project documentation for purpose and explanation of this function:
+          #### https://mathematicampr.atlassian.net/wiki/spaces/FPAR/pages/2210267224/Invalid+Sign-In+Lockout
+
+          # set up client for RDS data API
+          rds_data_client = boto3.client('rds-data')
+
+          # Set up db_params object to be used in all calls to RDS data API
+          db_params = {
+            'cluster_arn' : os.environ['DB_ClusterArn'],
+            'secret_arn'  : os.environ['DB_AdminSecret'],
+            'db_name'     : 'odamex',
+          }
+
+          def lambda_handler(event, context):
+            
+            # Pull user's ID and the trigger source from the event data
+            cognito_id = event['request']['userAttributes']['sub']
+            trigger = event['triggerSource']
+            
+            # Set up parameters to be used in RDS data API queries
+            params = [{'name': 'cognito_id', 'value': {'stringValue': cognito_id}}]
+            
+            # docs for triggerSource values:
+            # https://docs.aws.amazon.com/cognito/latest/developerguide/cognito-user-identity-pools-working-with-aws-lambda-triggers.html#cognito-user-pools-lambda-trigger-syntax-shared
+            
+            if trigger == 'PreAuthentication_Authentication':
+              pre_auth(params)
+            
+            elif trigger == 'PostAuthentication_Authentication':
+              post_auth(params)
+            
+            else:
+              raise Exception('event trigger source is an unexpected value: ', event['triggerSource'])
+                
+            return event
+            
+          def pre_auth(params):
+            '''Checks whether user is already locked out - if so, rejects authentication attempt.
+              Otherwise, logs data to be used in calculating future lockout periods.'''
+            
+            lockout_attempt_count = 5
+            transaction_id = get_transaction_id()
+            
+            # Step 1: Look for user having locked_out = true AND locked_out_until being in the future
+            # If both are true, reject the authentication attempt by raising an exception
+            sql = '''SELECT locked_out AND locked_out_until > NOW(),
+                CEILING(EXTRACT(epoch FROM (locked_out_until - NOW())) / 60)::int AS minutes
+              FROM users
+              WHERE cognito_id = :cognito_id;'''
+              
+            data = query(sql, params)
+            
+            print(data)
+            
+            if data[0][0]['booleanValue']:
+              raise Exception('User is locked out for the next %d minute(s)' % data[0][1]['longValue'])
+
+            # Step 2: We know user isn't locked out, but don't know yet if this attempt will
+            # be successful. So we'll insert a record of it assuming it will fail, but if
+            # it succeeds, then we'll delete this record and other failures for this user,
+            # re-setting their failed attempt counter
+            sql = '''INSERT INTO user_authentication_failures (cognito_id, attempt_time)
+              VALUES (:cognito_id, DEFAULT);'''
+              
+            query(sql, params)
+              
+            # Step 3: Count the records in user_authentication_failures for this user
+            # within the past 2 hours. If >= lockout_attempt_count, lock out the user.
+            sql = """SELECT COUNT(*) 
+              FROM user_authentication_failures
+              WHERE cognito_id = :cognito_id
+                AND attempt_time > NOW() - interval '2 hours';"""
+                
+            data = query(sql, params)
+              
+            if data[0][0]['longValue'] >= lockout_attempt_count:
+              
+              sql = """UPDATE users
+                SET locked_out = true, 
+                    locked_out_until = NOW() + interval '15 minutes'
+                WHERE cognito_id = :cognito_id;"""
+                
+              query(sql, params)
+                
+              print('User has been locked out.')
+            
+            commit_transaction(transaction_id)
+            
+            return True
+            
+          def post_auth(params):
+            '''Re-sets user's lockout status/time and failed auth attempts log upon
+              successful authentication (post-auth Cognito trigger).'''
+              
+            transaction_id = get_transaction_id()
+            
+            # Now that we know the authentication attempt was successful, we can clear out
+            # all accumulated consecutive failed attempts for this user, and we can unlock
+            # the user's account, if needed.
+            sql = '''UPDATE users
+              SET locked_out = false,
+                  locked_out_until = NULL
+              WHERE cognito_id = :cognito_id;'''
+              
+            query(sql, params)
+            
+            sql = '''DELETE FROM user_authentication_failures
+              WHERE cognito_id = :cognito_id;'''
+              
+            query(sql, params)
+            
+            commit_transaction(transaction_id)
+            
+            return True
+
+          def query(sql, params, client = rds_data_client, db_params = db_params, transaction_id = ''):
+            '''Utility function to be re-used for all db queries in this Lambda function.'''
+            
+            response = client.execute_statement(
+              resourceArn = db_params['cluster_arn'],
+              secretArn   = db_params['secret_arn'],
+              database    = db_params['db_name'],
+              sql         = sql,
+              parameters  = params,
+              transactionId = transaction_id)
+            
+            return response.get('records')
+            
+          def get_transaction_id(client = rds_data_client, db_params = db_params):  
+            '''Utility function to get a transaction ID for db queries that should be run
+              as a transaction.'''
+              
+            response = client.begin_transaction(
+              resourceArn = db_params['cluster_arn'],
+              secretArn   = db_params['secret_arn'],
+              database    = db_params['db_name'])
+              
+            return response['transactionId']
+            
+          def commit_transaction(transaction_id, client = rds_data_client, db_params = db_params):
+            '''Utility function to commit transactions.'''
+            
+            client.commit_transaction(
+              resourceArn = db_params['cluster_arn'],
+              secretArn   = db_params['secret_arn'],
+              transactionId = transaction_id)
+            
+            return True
+
+  LambdaCreateAuthChallengePermission:
+    Type: AWS::Lambda::Permission
+    Condition: CreateSecurityScanResources
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !GetAtt LambdaCreateAuthChallenge.Arn
+      Principal: cognito-idp.amazonaws.com
+      SourceArn: !GetAtt UserPool.Arn
+
+  LambdaDefineAuthChallengePermission:
+    Type: AWS::Lambda::Permission
+    Condition: CreateSecurityScanResources
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !GetAtt LambdaDefineAuthChallenge.Arn
+      Principal: cognito-idp.amazonaws.com
+      SourceArn: !GetAtt UserPool.Arn
+
+  LambdaVerifyAuthChallengePermission:
+    Type: AWS::Lambda::Permission
+    Condition: CreateSecurityScanResources
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !GetAtt LambdaVerifyAuthChallenge.Arn
+      Principal: cognito-idp.amazonaws.com
+      SourceArn: !GetAtt UserPool.Arn
+
+  LambdaPrePostAuthTriggerPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !GetAtt LambdaPrePostAuthTrigger.Arn
+      Principal: cognito-idp.amazonaws.com
+      SourceArn: !GetAtt UserPool.Arn
+
+  LambdaCustomEmailsPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !GetAtt LambdaCustomEmails.Arn
+      Principal: cognito-idp.amazonaws.com
+      SourceArn: !GetAtt UserPool.Arn
+
+Outputs:
+  UserPoolId:
+    Value: !Ref UserPool
+  UserPoolArn:
+    Value: !GetAtt UserPool.Arn
+    Description: ARN for the user pool
+  UserPoolClient:
+    Description: The user pool app client id for web
+    Value: !Ref UserPoolClient
+  IdentityPoolId:
+    Value: !Ref IdentityPool

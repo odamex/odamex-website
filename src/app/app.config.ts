@@ -2,6 +2,10 @@ import { ApplicationConfig, provideBrowserGlobalErrorListeners, provideZonelessC
 import { provideRouter } from '@angular/router';
 
 import { routes } from './app.routes';
+import { config } from '../_config';
+
+export const environment = config;
+
 
 export const appConfig: ApplicationConfig = {
   providers: [

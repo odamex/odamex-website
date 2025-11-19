@@ -6,7 +6,10 @@
     "start": "ng serve",
     "build": "ng build",
     "watch": "ng build --watch --configuration development",
-    "test": "ng test"
+    "test": "ng test",
+    "prebuild": "ts-appversion",
+    "prestart": "ts-appversion",
+    "pretest": "ts-appversion"
   },
   "prettier": {
     "printWidth": 100,
@@ -32,7 +35,9 @@
     "@ng-icons/bootstrap-icons": "^32.4.0",
     "@ng-icons/core": "^32.4.0",
     "@popperjs/core": "^2.11.8",
+    "@saithodev/ts-appversion": "^2.2.0",
     "bootstrap": "^5.3.8",
+    "bootstrap-icons": "^1.13.1",
     "fontawesome": "^5.6.3",
     "rxjs": "~7.8.0",
     "tslib": "^2.3.0"

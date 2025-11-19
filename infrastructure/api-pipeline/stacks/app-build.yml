@@ -1,0 +1,152 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: The resources used to create the WebApp environment.
+Parameters:
+  Env:
+    Type: String
+  VPC:
+    Type: String
+  PrivateSubnets:
+    Type: List<AWS::EC2::Subnet::Id>
+  SecurityGroup:
+    Type: String
+  DBClusterArn:
+    Type: String
+  DBAdminPassword:
+    Type: String
+
+Conditions:
+  TestStage: !Equals [!Ref Env, test]
+  NotTestStage: !Not [Condition: TestStage]
+
+Resources:
+  CodeBuildServiceRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      RoleName: !Sub MathRole-CodeBuildServiceRole-${Env}
+      PermissionsBoundary: !Sub arn:aws:iam::${AWS::AccountId}:policy/Math-Boundary-Policy
+      Path: /
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: codebuild.amazonaws.com
+            Action: 'sts:AssumeRole'
+      Policies:
+        - PolicyName: !Sub MathPolicy-CodeBuildServiceRole-${Env}
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Action:
+                  - 'cloudtrail:CreateTrail'
+                  - 'cloudtrail:DeleteTrail'
+                  - 'cognito-idp:*'
+                  - 'ec2:*'
+                  - 'lambda:*'
+                  - 'logs:CreateLogGroup'
+                  - 'logs:CreateLogStream'
+                  - 'logs:PutLogEvents'
+                  - 'rds:*'
+                  - 'rds-data:*'
+                  - 's3:*'
+                  - 'secretsmanager:*'
+                Effect: Allow
+                Resource: '*'
+              - Action:
+                  - 'kms:Encrypt'
+                  - 'kms:Decrypt'
+                  - 'kms:ReEncrypt*'
+                  - 'kms:GenerateDataKey*'
+                  - 'kms:DescribeKey'
+                Effect: Allow
+                Resource:
+                  - arn:aws:kms:us-east-1:370695041566:key/8bf6e3d2-955d-4764-9f8f-52e522753ca6
+                  - arn:aws:kms:us-east-1:370695041566:key/a8a96f13-a527-4556-accc-e602e1cd1414
+  CodeBuildProject:
+    Type: 'AWS::CodeBuild::Project'
+    Properties:
+      Artifacts:
+        Type: CODEPIPELINE
+      Source:
+        Type: CODEPIPELINE
+        BuildSpec: |
+          version: 0.2
+          env:
+            exported-variables:
+              - secretRotationCodeVersionId
+          phases:
+            install:
+              runtime-versions:
+                nodejs: latest
+                python: latest
+            build:
+              commands:
+                # --> DB
+                - cd $CODEBUILD_SRC_DIR/infrastructure/db
+                - npm install
+                - node build/01-codebuild-db-wakeup.js
+                - node build/02-codebuild-db-setup.js
+                - node build/03-codebuild-db-create-views.js
+                - node build/04-codebuild-db-initial-data.js
+                - node build/05-codebuild-pr-test-template-db.js
+                # --> LAMBDAS
+                - npm install -g typescript
+
+                # REST-API LAMBDA
+                - cd $CODEBUILD_SRC_DIR/lambdas/rest-portal-api && npm pkg delete scripts.prepare && npm install 
+                - tsc 
+                - npm prune --omit=dev 
+                # this is a test to see if the README.md file is causing a security hub finding false positive 
+                # about hardcoded credentials in the readme file
+                - rm node_modules/@googlemaps/google-maps-services-js/README.md
+                - zip -r dist.zip node_modules built package*.json
+                - aws lambda update-function-code --function-name $ENV-rest-api --zip-file fileb://dist.zip
+                
+                # DATA-QUALITY-CHECK LAMBDA
+                - cd $CODEBUILD_SRC_DIR/lambdas/data-quality-checks && npm pkg delete scripts.prepare && npm install 
+                - tsc
+                - npm prune --omit=dev
+                - zip -r dist.zip node_modules built package*.json
+                - aws lambda update-function-code --function-name $ENV-data-quality-checks --zip-file fileb://dist.zip
+                
+                # FILE-UPLOAD-PROCESSING LAMBDA
+                - cd $CODEBUILD_SRC_DIR/lambdas/file-upload-processing
+                - zip -r dist.zip lambda_function.py odamex/*.py odamex/table_specs/*.py
+                - aws lambda update-function-code --function-name $ENV-file-upload-processing --zip-file fileb://dist.zip
+
+                # SECRET-ROTATION LAMBDA
+                - cd $CODEBUILD_SRC_DIR/lambdas/secret-rotation
+                - ZIPFILE=SecretsManagerRDSPostgreSQLRotationSingleUser.zip
+                - zip -r $ZIPFILE lambda_function.py
+                - secretRotationCodeVersionId=$(aws s3api put-object --bucket $ENV-odamex-infrastructure --key $ZIPFILE --body $ZIPFILE | jq '.VersionId' | xargs)
+
+                # SECRET-ROTATION SAM TEMPLATE
+                - cd $CODEBUILD_SRC_DIR/infrastructure/stacks/nested-stacks
+                - aws s3 cp secret-rotation-sam.yml s3://$ENV-odamex-infrastructure/nested-stacks/secret-rotation-sam.yml
+                
+              artifacts:
+                base-directory: $CODEBUILD_SRC_DIR/app/dist
+                files:
+                  - '**/*'
+      Environment:
+        ComputeType: BUILD_GENERAL1_MEDIUM
+        Image: 'aws/codebuild/amazonlinux2-x86_64-standard:5.0'
+        Type: LINUX_CONTAINER
+        EnvironmentVariables:
+          - Name: ENV
+            Value: !Ref Env
+          - Name: DB_ClusterArn
+            Value: !Ref DBClusterArn
+          - Name: DB_Admin_Password
+            Value: !Ref DBAdminPassword
+      Name: !Sub ${Env}-CodeBuildProject
+      ServiceRole: !Ref CodeBuildServiceRole
+      VpcConfig:
+        VpcId: !Ref VPC
+        Subnets: !Ref PrivateSubnets
+        SecurityGroupIds:
+          - !Ref SecurityGroup
+
+Outputs:
+  CodeBuildProject:
+    Value: !Ref CodeBuildProject

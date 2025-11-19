@@ -1,0 +1,104 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: The resources used to create the WebApp environment.
+Parameters:
+  Env:
+    Type: String
+    Description: The name for the environment that this cloudformation will be part of.
+  GitHubTokenParameterName:
+    Type: String
+    NoEcho: true
+
+Conditions:
+  TestStage: !Equals [!Ref Env, test]
+  NotTestStage: !Not [Condition: TestStage]
+
+Resources:
+  CodeTestBuildServiceRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      RoleName: !Sub MathRole-CodeTestBuildServiceRole-${Env}
+      PermissionsBoundary: !Sub arn:aws:iam::${AWS::AccountId}:policy/Math-Boundary-Policy
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: codebuild.amazonaws.com
+            Action: 'sts:AssumeRole'
+      Policies:
+        - PolicyName: !Sub MathPolicy-CodeTestBuildServiceRole-${Env}
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Action:
+                  - 'cloudfront:*'
+                  - 'ec2:*'
+                  - 'lambda:*'
+                  - 'logs:CreateLogGroup'
+                  - 'logs:CreateLogStream'
+                  - 'logs:PutLogEvents'
+                  - 'rds:*'
+                  - 'rds-data:*'
+                  - 's3:*'
+                  - 'ssm:*'
+                Effect: Allow
+                Resource: '*'
+              - Action:
+                  - 'kms:Decrypt'
+                  - 'kms:DescribeKey'
+                  - 'kms:Encrypt'
+                  - 'kms:GenerateDataKey*'
+                  - 'kms:ReEncrypt*'
+                Effect: Allow
+                Resource:
+                  - arn:aws:kms:us-east-1:370695041566:key/8bf6e3d2-955d-4764-9f8f-52e522753ca6
+                  - arn:aws:kms:us-east-1:370695041566:key/a8a96f13-a527-4556-accc-e602e1cd1414
+  CodeTestBuildProject:
+    Type: 'AWS::CodeBuild::Project'
+    Properties:
+      Artifacts:
+        Type: CODEPIPELINE
+      Source:
+        Type: CODEPIPELINE
+        BuildSpec: |
+          version: 0.2
+          phases:
+            install:
+              runtime-versions:
+                nodejs: latest
+            build:
+              commands:
+                - npm install -g typescript
+                - cd $CODEBUILD_SRC_DIR/lambdas
+                # REST PORTAL API
+                - cd rest-portal-api 
+                - npm install 
+                - tsc 
+                - npm prune --omit=dev
+                # DATA QUALITY CHECKS
+                - cd ../data-quality-checks 
+                - npm install 
+                - tsc 
+                - npm prune --omit=dev
+                # FILE UPLOAD PROCESSING
+                - cd ../file-upload-processing
+      Environment:
+        ComputeType: BUILD_GENERAL1_MEDIUM
+        Image: 'aws/codebuild/amazonlinux2-x86_64-standard:5.0'
+        Type: LINUX_CONTAINER
+        EnvironmentVariables:
+          - Name: ENV
+            Value: !Ref Env
+          - Name: GITHUB_TOKEN
+            Value: !Sub '{{resolve:ssm:${GitHubTokenParameterName}}}'
+      Name: !Sub ${Env}-CodeTestBuildProject
+      ServiceRole: !Ref CodeTestBuildServiceRole
+    #   VpcConfig:
+    #     VpcId: !Ref VPC
+    #     Subnets: !Ref PrivateSubnets
+    #     SecurityGroupIds:
+    #       - !Ref SecurityGroup
+
+Outputs:
+  CodeBuildProject:
+    Value: !Ref CodeTestBuildProject

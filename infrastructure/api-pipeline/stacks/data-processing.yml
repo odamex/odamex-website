@@ -1,0 +1,393 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: "Template with resources for data processing steps (quality checks, anonymization, initial handling of encounter-level data, etc.)"
+Parameters:
+  Env:
+    Description: Environment name
+    Type: String
+    Default: "dev"
+  UserPoolId:
+    Type: String
+  UserPoolArn:
+    Type: String
+  DBAdminSecret:
+    Type: String
+  DBClusterArn:
+    Type: String
+  PandasLambdaLayerVersion:
+    Type: 'AWS::SSM::Parameter::Value<String>'
+    Description: SSM parameter for pandas lambda layer version
+    Default: 'pandas-lambda-layer-version'
+
+Resources:
+  LambdaForDataProcessingExecRole:
+    Type: "AWS::IAM::Role"
+    Properties:
+      RoleName: !Sub MathRole-LambdaForDataQualityExecRole-${Env}
+      PermissionsBoundary: !Sub arn:aws:iam::${AWS::AccountId}:policy/Math-Boundary-Policy
+      Policies:
+        - PolicyName: !Sub "MathPolicy-LambdaForDataQualityExecRole-${Env}"
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action: "rds-data:*"
+                # RDS db cluster ARNs are not directly available - need to be constructed.
+                # See https://docs.aws.amazon.com/AmazonRDS/latest/AuroraUserGuide/USER_Tagging.ARN.html
+                # So for now, leaving it out to save time. But ideally this would specify
+                # this environment's db cluster only.
+                Resource: "*"
+              - Effect: Allow
+                Action: "rds:DescribeDBClusters"
+                # Same issue described above, we can't get the cluster ARN directly from the stack,
+                # so granting access to describe attributes of all clusters.
+                Resource: "*"
+              - Effect: Allow
+                Action: "secretsmanager:GetSecretValue"
+                Resource:
+                  - !Ref DBAdminSecret
+              - Effect: Allow
+                Action:
+                  - "s3:ListBucket"
+                Resource:
+                  - !GetAtt S3UserUpload.Arn
+              - Effect: Allow
+                Action:
+                  - "s3:GetObject"
+                  - "s3:DeleteObject"
+                Resource:
+                  - !Join ["", [!GetAtt S3UserUpload.Arn, "/*"]]
+              - Effect: Allow
+                Action:
+                  - "logs:CreateLogGroup"
+                  - "logs:CreateLogStream"
+                  - "logs:PutLogEvents"
+                  - "cloudtrail:*"
+                Resource: "*"
+              - Effect: Allow
+                Action:
+                  - "s3:ListBucket"
+                Resource:
+                  - !GetAtt S3UserUploadProcessed.Arn
+              - Effect: Allow
+                Action:
+                  - "s3:PutObject"
+                  - "s3:GetObject"
+                  - "s3:DeleteObject"
+                Resource:
+                  - !Join ["", [!GetAtt S3UserUploadProcessed.Arn, "/*"]]
+              - Effect: Allow
+                Action:
+                  - "ses:SendEmail"
+                Resource: "*"
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Sid: ""
+            Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: "sts:AssumeRole"
+          - Sid: ""
+            Effect: Allow
+            Principal:
+              Service: cloudtrail.amazonaws.com
+            Action: "sts:AssumeRole"
+
+  LambdaForDataQualityChecks:
+    Type: "AWS::Lambda::Function"
+    Properties:
+      FunctionName: !Sub "${Env}-data-quality-checks"
+      Handler: built/index.handler
+      MemorySize: 384
+      Role: !GetAtt LambdaForDataProcessingExecRole.Arn
+      Runtime: nodejs20.x
+      Timeout: 600
+      Environment:
+        Variables:
+          ENV: !Ref Env
+          REGION: !Ref "AWS::Region"
+          AUTH_USERPOOLID: !Ref UserPoolId
+          S3_USER_UPLOAD: !Ref S3UserUpload
+          DB_AdminSecret: !Ref DBAdminSecret
+          DB_ClusterArn: !Ref DBClusterArn
+      Code:
+        ZipFile: |
+          // to be deployed
+
+  LambdaForFileUploadProcessing:
+    Type: "AWS::Lambda::Function"
+    Properties:
+      FunctionName: !Sub "${Env}-file-upload-processing"
+      Handler: lambda_function.lambda_handler
+      # Note: at time of adding (2021-12-28), this layer is provided by AWS and seems to be available publicly,
+      # hence the hard-coded ARN. It contains Pandas, which we need, and saves us a massive headache of creating,
+      # maintaining, and deploying our own layer across multiple environments. Let's use this until we find a big
+      # problem with it. ARN can be confirmed at:
+      # https://aws-data-wrangler.readthedocs.io/en/stable/install.html
+      Layers:
+        - !Sub "arn:aws:lambda:us-east-1:336392948345:layer:AWSSDKPandas-Python313:${PandasLambdaLayerVersion}"
+      MemorySize: 8192
+      Role: !GetAtt LambdaForDataProcessingExecRole.Arn
+      Runtime: python3.13
+      Timeout: 900
+      Environment:
+        Variables:
+          ENV: !Ref Env
+          S3_USER_UPLOAD: !Ref S3UserUpload
+          S3_USER_UPLOAD_PROCESSED: !Ref S3UserUploadProcessed
+          DB_AdminSecret: !Ref DBAdminSecret
+          DB_ClusterArn: !Ref DBClusterArn
+      Code:
+        ZipFile: |
+          // to be deployed
+
+  EventBridgeRuleForFileUploadProcessing:
+    Type: "AWS::Events::Rule"
+    Properties:
+      EventPattern:
+        source:
+          - "aws.s3"
+        detail-type:
+          - "AWS API Call via CloudTrail"
+        detail:
+          eventSource:
+            - "s3.amazonaws.com"
+          eventName:
+            - "CopyObject"
+            - "PutObject"
+          requestParameters:
+            bucketName:
+              - !Ref S3UserUpload
+            # This key pattern means the rule will only trigger a Lambda execution when a file
+            # is uploaded into the reportingPeriod_#/grant_#/ folder path, as done by the UI.
+            # This allows users to manually upload without triggering the Lambda.
+            # It also allows automated testing to upload files to a separate folder and
+            # invoke a separate version of the Lambda, without triggering the main Lambda.
+            key:
+              - prefix: "reportingPeriod_"
+              - prefix: "automated-testing/eventbridge-executions/"
+
+      Description: "An Event Bridge rule to trigger the file-upload-processing lambda when files are added to the S3UserUpload bucket"
+      Name: !Sub "FileUploadProcessingEvents-${Env}"
+      Targets:
+        - Arn: !GetAtt
+            - LambdaForFileUploadProcessing
+            - Arn
+          Id: !Sub "EventBridgeRuleForFileUploadProcessing-${Env}"
+
+  EventBridgeRuleForFileUploadProcessingPermissions:
+    Type: "AWS::Lambda::Permission"
+    Properties:
+      Action: "lambda:InvokeFunction"
+      FunctionName: !GetAtt LambdaForFileUploadProcessing.Arn
+      Principal: "events.amazonaws.com"
+      SourceArn: !GetAtt EventBridgeRuleForFileUploadProcessing.Arn
+
+  S3UserUpload:
+    Type: "AWS::S3::Bucket"
+    DeletionPolicy: Retain
+    Properties:
+      BucketName: !Sub "${Env}-odamex-user-upload"
+      AccessControl: Private
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      CorsConfiguration:
+        CorsRules:
+          - AllowedHeaders:
+              - "*"
+            AllowedMethods:
+              - PUT
+              - POST
+            AllowedOrigins:
+              - "*"
+            ExposedHeaders:
+              - x-amz-server-side-encryption
+              - x-amz-request-id
+              - x-amz-id-2
+            MaxAge: 300
+      LifecycleConfiguration:
+        Rules:
+          - Id: DataRemoval
+            # This prefix restricts the rule to object keys beginning like this, since actual user uploads
+            # get prefixed with 'reportingPeriod_.../...'. In dev/qa/stg/prod, objects should only be prefixed
+            # like that. But in local, we want to keep some files for automated testing, and those keys begin
+            # with 'automated_testing/...', so this rule will exclude them from removal.
+            Prefix: reportingPeriod_
+            Status: Enabled
+            ExpirationInDays: 365
+      NotificationConfiguration:
+        EventBridgeConfiguration:
+          EventBridgeEnabled: true
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+
+  S3UserUploadBucketPolicy:
+    Type: "AWS::S3::BucketPolicy"
+    Properties:
+      Bucket: !Ref S3UserUpload
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: "AllowSSLRequestsOnly"
+            Effect: "Deny"
+            Principal: "*"
+            Action: "s3:*"
+            Resource:
+              - !GetAtt S3UserUpload.Arn
+              - !Join ["", [!GetAtt S3UserUpload.Arn, "/*"]]
+            Condition:
+              Bool:
+                aws:SecureTransport: "false"
+
+  S3UserUploadLogs:
+    Type: "AWS::S3::Bucket"
+    Properties:
+      BucketName: !Sub "${Env}-odamex-user-upload-logs"
+      AccessControl: Private
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+
+  S3UserUploadLogsBucketPolicy:
+    Type: "AWS::S3::BucketPolicy"
+    Properties:
+      Bucket: !Ref S3UserUploadLogs
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: "UserUploadLogsAclCheck"
+            Effect: "Allow"
+            Principal:
+              Service: "cloudtrail.amazonaws.com"
+            Action: "s3:GetBucketAcl"
+            Resource: !GetAtt S3UserUploadLogs.Arn
+          - Sid: "UserUploadLogsWrite"
+            Effect: "Allow"
+            Principal:
+              Service: "cloudtrail.amazonaws.com"
+            Action: "s3:PutObject"
+            Resource: !Join ["", [!GetAtt S3UserUploadLogs.Arn, "/*"]]
+          - Sid: "AllowSSLRequestsOnly"
+            Effect: "Deny"
+            Principal: "*"
+            Action: "s3:*"
+            Resource:
+              - !GetAtt S3UserUploadLogs.Arn
+              - !Join ["", [!GetAtt S3UserUploadLogs.Arn, "/*"]]
+            Condition:
+              Bool:
+                aws:SecureTransport: "false"
+
+  S3UserUploadLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      RetentionInDays: 2192
+
+  S3UserUploadCloudTrail:
+    Type: "AWS::CloudTrail::Trail"
+    Properties:
+      EnableLogFileValidation: true
+      EventSelectors:
+        - DataResources:
+            - Type: "AWS::S3::Object"
+              Values:
+                - !Join ["", [!GetAtt S3UserUpload.Arn, "/"]]
+          IncludeManagementEvents: false
+          ReadWriteType: All
+      IncludeGlobalServiceEvents: true
+      IsLogging: true
+      IsMultiRegionTrail: true
+      IsOrganizationTrail: false
+      S3BucketName: !Ref S3UserUploadLogs
+      TrailName: !Sub "${Env}-file-upload-processing-data-events"
+      CloudWatchLogsLogGroupArn: !GetAtt S3UserUploadLogGroup.Arn
+      CloudWatchLogsRoleArn: !GetAtt LambdaForDataProcessingExecRole.Arn
+
+  S3UserUploadProcessed:
+    Type: "AWS::S3::Bucket"
+    Properties:
+      BucketName: !Sub "${Env}-odamex-user-upload-processed"
+      AccessControl: Private
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      LifecycleConfiguration:
+        Rules:
+          - Id: DataRemoval
+            # Note we don't need a prefix rule on this lifecycle config (as in S3UserUpload), because it's
+            # fine to clear out all processed intermediate data files. The automated testing files are not 
+            # stored in this bucket.
+            Status: Enabled
+            ExpirationInDays: 365
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+
+  S3UserUploadProcessedBucketPolicy:
+    Type: "AWS::S3::BucketPolicy"
+    Properties:
+      Bucket: !Ref S3UserUploadProcessed
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: "AllowSSLRequestsOnly"
+            Effect: "Deny"
+            Principal: "*"
+            Action: "s3:*"
+            Resource:
+              - !GetAtt S3UserUploadProcessed.Arn
+              - !Join ["", [!GetAtt S3UserUploadProcessed.Arn, "/*"]]
+            Condition:
+              Bool:
+                aws:SecureTransport: "false"
+
+  S3UtilityData:
+    Type: "AWS::S3::Bucket"
+    Properties:
+      BucketName: !Sub "${Env}-odamex-utility-data"
+      AccessControl: Private
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+
+  S3UtilityDataBucketPolicy:
+    Type: "AWS::S3::BucketPolicy"
+    Properties:
+      Bucket: !Ref S3UtilityData
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: "AllowSSLRequestsOnly"
+            Effect: "Deny"
+            Principal: "*"
+            Action: "s3:*"
+            Resource:
+              - !GetAtt S3UtilityData.Arn
+              - !Join ["", [!GetAtt S3UtilityData.Arn, "/*"]]
+            Condition:
+              Bool:
+                aws:SecureTransport: "false"
+
+Outputs:
+  S3UserUploadName:
+    Value: !Ref S3UserUpload

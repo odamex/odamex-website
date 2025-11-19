@@ -1,0 +1,597 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: Odamex backend application pipeline
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: Project Information
+        Parameters:
+          - EnvironmentName
+          - ProjectName
+          - ProjectURL
+          - EmailDomainSourceArn
+      - Label:
+          default: Source Repository Information
+        Parameters:
+          - GitHubOwner
+          - GitHubTokenParameterName
+          - GoogleMapsApiKeyParameterName
+          - AppRepo
+          - AppBranch
+          - VeracodeParameterPrefix
+      - Label:
+          default: Network Information
+        Parameters:
+          - VPCID
+          - VPCPrivateSubnets
+          - VPCDefaultSecurityGroup
+          - WAFArn
+Parameters:
+  AppBranch:
+    Description: GitHub repository branch name
+    Type: String
+    Default: 'dev'
+    AllowedValues:
+      - 'local'
+      - 'dev'
+      - 'qa'
+      - 'main'
+  AppRepo:
+    Description: GitHub repository name
+    Type: String
+    Default: 'odamex'
+  EmailDomainSourceArn:
+    Description: ARN for the SES verified identity
+    Type: String
+  EnvironmentName:
+    Description: Environment name
+    Type: String
+    Default: 'dev'
+    AllowedValues:
+      - 'local'
+      - 'dev'
+      - 'qa'
+      - 'stg'
+      - 'prod'
+  GitHubOwner:
+    Description: GitHub username owning the repo
+    Type: String
+    Default: mathematica-org
+  GitHubTokenParameterName:
+    Description: SSM Parameter Name of the GitHub token
+    Type: AWS::SSM::Parameter::Name
+  GoogleMapsApiKeyParameterName:
+    Description: SSM Parameter name of the Google Maps API key
+    Type: AWS::SSM::Parameter::Name
+  ProjectName:
+    Description: Primary project name
+    Type: String
+    Default: 'odamex'
+  ProjectURL:
+    Description: URL for the web application
+    Type: String
+    Default: ''
+  VeracodeParameterPrefix:
+    Default: '/veracode'
+    Description: Name of veracode parameter prefix
+    Type: String
+  VPCID:
+    Description: Existing VPC ID (provisioned by ITS)
+    Type: AWS::EC2::VPC::Id
+  VPCPrivateSubnets:
+    Description: Private subnets associated with the existing VPC
+    Type: List<AWS::EC2::Subnet::Id>
+  VPCDefaultSecurityGroup:
+    Description: Default security group associated with the existing VPC
+    Type: AWS::EC2::SecurityGroup::Id
+  WAFArn:
+    Description: WAF V2 Web ACL Arn for API Gateway and CloudFormation (from ITS)
+    Type: String
+
+Conditions:
+  IsLocal: !Equals
+    - !Ref EnvironmentName
+    - local
+  IsDev: !Equals
+    - !Ref EnvironmentName
+    - dev
+  IsLocalOrDev: !Or
+    - !Condition IsLocal
+    - !Condition IsDev
+  IsProd: !Equals
+    - !Ref EnvironmentName
+    - prod
+  IsNotProd: !Not
+    - !Condition IsProd
+
+Resources:
+  # Role used to give CodePipeline to release a build.
+  CodePipelineServiceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub MathRole-CodePipelineServiceRole-${EnvironmentName}
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: codepipeline.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: !Sub MathPolicy-CodePipelineServiceRole-${EnvironmentName}
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              # Allow codepipeline to put artifacts in the S3 bucket
+              # as well as get artifacts back out of it.
+              - Resource: '*' #  - !Sub arn:aws:s3:::${ArtifactBucket}/*
+                Effect: Allow
+                Action:
+                  - s3:*
+                  - ecr:*
+                  - codebuild:StartBuild
+                  - codebuild:BatchGetBuilds
+                  - iam:PassRole
+                  - cloudformation:CreateChangeSet
+                  - cloudformation:CreateStack
+                  - cloudformation:CreateUploadBucket
+                  - cloudformation:DeleteStack
+                  - cloudformation:Describe*
+                  - cloudformation:List*
+                  - cloudformation:UpdateStack
+                  - cloudformation:ValidateTemplate
+                  - cloudformation:ExecuteChangeSet
+                  - ssm:GetParameter
+                  - ssm:DescribeParameters
+                  - ssm:GetParameters
+
+  # CloudFormation deployment role. This role is passed by CodeBuild to
+  # CloudFormation to use when setting up the application resources
+  CloudFormationDeployRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub MathRole-CloudFormationDeployRole-${EnvironmentName}
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: cloudformation.amazonaws.com
+            Action: sts:AssumeRole
+          - Effect: Allow
+            Principal:
+              Service: cloudtrail.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: !Sub MathPolicy-CloudFormationDeployRole-${EnvironmentName}
+          PolicyDocument:
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 'acm:*'
+                  - 'apigateway:*'
+                  - 'cloudformation:*'
+                  - 'cloudfront:*'
+                  - 'cloudtrail:*'
+                  - 'cloudwatch:*'
+                  - 'codebuild:*'
+                  - 'codepipeline:*'
+                  - 'cognito-identity:*'
+                  - 'cognito-idp:*'
+                  - 'dynamodb:*'
+                  - 'ec2:*'
+                  - 'ecr:*'
+                  - 'ecs:*'
+                  - 'events:*'
+                  - 'iam:*'
+                  - 'lambda:*'
+                  - 'logs:*'
+                  - 'rds:*'
+                  - 'route53:*'
+                  - 's3:*'
+                  - 'secretsmanager:*'
+                  - 'ses:*'
+                  - 'sns:*'
+                  - 'ssm:*'
+                  - 'states:*'
+                  - 'wafv2:*'
+                Resource: '*'
+
+  # While the build is in progress we need a place to store artifacts
+  ArtifactBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    Properties:
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+
+  # Infrastructure bucket to hold nested stacks and lambda code
+  InfrastructureBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: RetainExceptOnCreate
+    Properties:
+      BucketName: !Sub '${EnvironmentName}-odamex-infrastructure'
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      LifecycleConfiguration:
+        Rules:
+          - NoncurrentVersionTransition:
+              NewerNoncurrentVersions: 5
+              StorageClass: INTELLIGENT_TIERING
+              TransitionInDays: 2557 # Number of days in 7 years
+            Status: Enabled
+      NotificationConfiguration:
+        EventBridgeConfiguration:
+          EventBridgeEnabled: true
+      VersioningConfiguration:
+        Status: Enabled
+  InfrastructureBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref InfrastructureBucket
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: 'AllowSSLRequestsOnly'
+            Effect: 'Deny'
+            Principal: '*'
+            Action: 's3:*'
+            Resource:
+              - !GetAtt InfrastructureBucket.Arn
+              - !Join ['', [!GetAtt InfrastructureBucket.Arn, '/*']]
+            Condition:
+              Bool:
+                aws:SecureTransport: 'false'
+
+  # This pipeline defines the steps to build, deploy, and release the application
+  Pipeline:
+    Type: AWS::CodePipeline::Pipeline
+    Properties:
+      Name: !Sub ${EnvironmentName}-pipeline
+      Tags:
+        - Key: EnvironmentName
+          Value: !Ref EnvironmentName
+        # Edit this tag value if you need to update the pipeline based on 
+        # changes to parameters/conditions but not resources - without some change
+        # to a resource property (like this), CloudFormation won't detect a change
+        # and will not allow the stack to update.
+        - Key: ForceStackUpdateTag
+          Value: '2024-10-29'
+      RoleArn: !GetAtt CodePipelineServiceRole.Arn
+      ArtifactStore:
+        Type: S3
+        Location: !Ref ArtifactBucket
+      Stages:
+        # First we have to pull the source code from the Github repository.
+        - Name: Source
+          Actions:
+            - Name: App
+              ActionTypeId:
+                Category: Source
+                Owner: ThirdParty
+                Provider: GitHub
+                Version: '1'
+              Configuration:
+                Owner: !Ref GitHubOwner
+                OAuthToken: !Sub '{{resolve:ssm:${GitHubTokenParameterName}}}'
+                Repo: !Ref AppRepo
+                Branch: !Ref AppBranch
+                PollForSourceChanges: false
+              OutputArtifacts:
+                - Name: AppArtifact
+        - !If
+          - IsProd
+          - Name: Manual_Approval
+            Actions:
+              - Name: DeployToProduction
+                ActionTypeId:
+                  Category: Approval
+                  Owner: AWS
+                  Version: '1'
+                  Provider: Manual
+                RunOrder: 1
+          - !Ref AWS::NoValue
+
+        - !If
+          - IsLocalOrDev
+          - Name: Testing
+            Actions:
+              - !If
+                - IsLocal
+                - Name: WebAppUnitTestsBuild
+                  Namespace: AppUnitTestingVars
+                  ActionTypeId:
+                    Category: Deploy
+                    Owner: AWS
+                    Version: '1'
+                    Provider: CloudFormation
+                  Configuration:
+                    ActionMode: CREATE_UPDATE
+                    RoleArn: !GetAtt CloudFormationDeployRole.Arn
+                    StackName: !Sub '${EnvironmentName}-app-build-tests-project'
+                    TemplatePath: AppArtifact::infrastructure/stacks/app-tests-build.yml
+                    Capabilities: CAPABILITY_NAMED_IAM
+                    ParameterOverrides: !Sub |
+                      { 
+                        "Env": "${EnvironmentName}",
+                        "GitHubTokenParameterName": "${GitHubTokenParameterName}"
+                      }
+                  InputArtifacts:
+                    - Name: AppArtifact
+                  RunOrder: 1
+                - !Ref AWS::NoValue
+              - !If
+                - IsDev
+                - Name: SASTScanBuild
+                  Namespace: SASTScanVars
+                  ActionTypeId:
+                    Category: Deploy
+                    Owner: AWS
+                    Version: '1'
+                    Provider: CloudFormation
+                  Configuration:
+                    ActionMode: CREATE_UPDATE
+                    RoleArn: !GetAtt CloudFormationDeployRole.Arn
+                    StackName: !Sub '${ProjectName}-${EnvironmentName}-sast-scan'
+                    TemplatePath: AppArtifact::infrastructure/stacks/sast-scan.yaml
+                    Capabilities: CAPABILITY_NAMED_IAM
+                    ParameterOverrides: !Sub |
+                      { 
+                        "EnvironmentName": "${EnvironmentName}",
+                        "ProjectName": "${ProjectName}",
+                        "VeracodeParameterPrefix": "${VeracodeParameterPrefix}",
+                        "VeracodeSandboxName": "aws-codebuild-${EnvironmentName}"
+                      }
+                  InputArtifacts:
+                    - Name: AppArtifact
+                  RunOrder: 1
+                - !Ref AWS::NoValue
+
+              # app unit test
+              - !If
+                - IsLocal
+                - Name: WebAppUnitTests
+                  ActionTypeId:
+                    Category: Build
+                    Owner: AWS
+                    Version: '1'
+                    Provider: CodeBuild
+                  Configuration:
+                    ProjectName: '#{AppUnitTestingVars.CodeBuildProject}'
+                    PrimarySource: AppArtifact
+                  InputArtifacts:
+                    - Name: AppArtifact
+                  RunOrder: 2
+                - !Ref AWS::NoValue
+
+              # SAST scan
+              - !If
+                - IsDev
+                - Name: SASTScan
+                  ActionTypeId:
+                    Category: Build
+                    Owner: AWS
+                    Version: '1'
+                    Provider: CodeBuild
+                  Configuration:
+                    ProjectName: '#{SASTScanVars.CodeScanProject}'
+                    PrimarySource: AppArtifact
+                  InputArtifacts:
+                    - Name: AppArtifact
+                  RunOrder: 3
+                - !Ref AWS::NoValue
+          - !Ref AWS::NoValue
+
+        - Name: Resources
+          Actions:
+            # DB
+            - Name: DB
+              Namespace: DBVars
+              ActionTypeId:
+                Category: Deploy
+                Owner: AWS
+                Version: '1'
+                Provider: CloudFormation
+              Configuration:
+                ActionMode: CREATE_UPDATE
+                RoleArn: !GetAtt CloudFormationDeployRole.Arn
+                StackName: !Sub '${EnvironmentName}-database'
+                TemplatePath: AppArtifact::infrastructure/stacks/db.yml
+                Capabilities: CAPABILITY_NAMED_IAM
+                ParameterOverrides: !Sub
+                  - |
+                    {
+                      "Env": "${EnvironmentName}",
+                      "DatabaseSubnetList": "${DATABASE_SUBNET_LIST}",
+                      "VPCID": "${VPCID}",
+                      "VPCDefaultSecurityGroup": "${VPCDefaultSecurityGroup}"
+                    }
+                  - DATABASE_SUBNET_LIST: !Join
+                      - ','
+                      - !Ref VPCPrivateSubnets
+              InputArtifacts:
+                - Name: AppArtifact
+              RunOrder: 1
+
+            # authentication
+            - Name: AuthProvider
+              Namespace: AuthVars
+              ActionTypeId:
+                Category: Deploy
+                Owner: AWS
+                Version: '1'
+                Provider: CloudFormation
+              Configuration:
+                ActionMode: CREATE_UPDATE
+                RoleArn: !GetAtt CloudFormationDeployRole.Arn
+                StackName: !Sub '${EnvironmentName}-auth'
+                TemplatePath: AppArtifact::infrastructure/stacks/auth.yml
+                Capabilities: CAPABILITY_NAMED_IAM
+                ParameterOverrides: !Sub |
+                  {
+                    "DBAdminSecret": "#{DBVars.DBAdminPasswordV2}",
+                    "DBClusterArn": "#{DBVars.DatabaseClusterArnV2}",
+                    "EmailDomainSourceArn": "${EmailDomainSourceArn}",
+                    "Env": "${EnvironmentName}",
+                    "ProjectURL": "${ProjectURL}"
+                  }
+              InputArtifacts:
+                - Name: AppArtifact
+              RunOrder: 2
+
+            # Data Processing
+            - Name: DataProcessing
+              Namespace: DataProcessingVars
+              ActionTypeId:
+                Category: Deploy
+                Owner: AWS
+                Version: '1'
+                Provider: CloudFormation
+              Configuration:
+                ActionMode: CREATE_UPDATE
+                RoleArn: !GetAtt CloudFormationDeployRole.Arn
+                StackName: !Sub '${EnvironmentName}-data-processing'
+                TemplatePath: AppArtifact::infrastructure/stacks/data-processing.yml
+                Capabilities: CAPABILITY_NAMED_IAM
+                ParameterOverrides: !Sub |
+                  {
+                    "Env": "${EnvironmentName}",
+                    "UserPoolId": "#{AuthVars.UserPoolId}",
+                    "UserPoolArn": "#{AuthVars.UserPoolArn}",
+                    "DBAdminSecret": "#{DBVars.DBAdminPasswordV2}",
+                    "DBClusterArn": "#{DBVars.DatabaseClusterArnV2}"
+                  }
+              InputArtifacts:
+                - Name: AppArtifact
+              RunOrder: 3
+
+            #ApiSocketVars - API Socket
+            - Name: APIRest
+              Namespace: ApiRestVars
+              ActionTypeId:
+                Category: Deploy
+                Owner: AWS
+                Version: '1'
+                Provider: CloudFormation
+              Configuration:
+                ActionMode: CREATE_UPDATE
+                RoleArn: !GetAtt CloudFormationDeployRole.Arn
+                StackName: !Sub '${EnvironmentName}-api-rest'
+                TemplatePath: AppArtifact::infrastructure/stacks/api-rest.yml
+                Capabilities: CAPABILITY_AUTO_EXPAND,CAPABILITY_NAMED_IAM
+                ParameterOverrides: !Sub
+                  - |
+                    { 
+                      "DatabaseSecurityGroup": "${VPCDefaultSecurityGroup}",
+                      "DatabaseSubnetList": "${DATABASE_SUBNET_LIST}",
+                      "DBAdminSecret": "#{DBVars.DBAdminPasswordV2}",
+                      "DBClusterArn": "#{DBVars.DatabaseClusterArnV2}",
+                      "GoogleMapsApiKeyParameterName": "${GoogleMapsApiKeyParameterName}",
+                      "Env": "${EnvironmentName}",
+                      "ProjectName": "${ProjectName}",
+                      "ProjectURL": "${ProjectURL}",
+                      "S3UserUploadName": "#{DataProcessingVars.S3UserUploadName}",
+                      "UserPoolId": "#{AuthVars.UserPoolId}",
+                      "UserPoolArn": "#{AuthVars.UserPoolArn}",  
+                      "WAFArn": "${WAFArn}"
+                    }
+                  - DATABASE_SUBNET_LIST: !Join
+                      - ','
+                      - !Ref VPCPrivateSubnets
+              InputArtifacts:
+                - Name: AppArtifact
+              RunOrder: 4
+
+            #AppBuildVars - App build project
+            - Name: AppBuildProject
+              Namespace: AppBuildVars
+              ActionTypeId:
+                Category: Deploy
+                Owner: AWS
+                Version: '1'
+                Provider: CloudFormation
+              Configuration:
+                ActionMode: CREATE_UPDATE
+                RoleArn: !GetAtt CloudFormationDeployRole.Arn
+                StackName: !Sub '${EnvironmentName}-app-build-project'
+                TemplatePath: AppArtifact::infrastructure/stacks/app-build.yml
+                Capabilities: CAPABILITY_NAMED_IAM
+                ParameterOverrides: !Sub
+                  - |
+                    { 
+                      "Env": "${EnvironmentName}",
+                      "VPC": "${VPCID}",
+                      "PrivateSubnets": "${PRIVATE_SUBNETS}",
+                      "SecurityGroup": "${VPCDefaultSecurityGroup}",
+                      "DBAdminPassword": "#{DBVars.DBAdminPasswordV2}",
+                      "DBClusterArn": "#{DBVars.DatabaseClusterArnV2}"
+                    }
+                  - PRIVATE_SUBNETS: !Join
+                      - ','
+                      - !Ref VPCPrivateSubnets
+              InputArtifacts:
+                - Name: AppArtifact
+              RunOrder: 5
+
+            # builds app files
+            # update S3
+            # clears cloudfront dist
+            - Name: Deploy
+              Namespace: DeployVars
+              ActionTypeId:
+                Category: Build
+                Owner: AWS
+                Version: '1'
+                Provider: CodeBuild
+              Configuration:
+                ProjectName: '#{AppBuildVars.CodeBuildProject}'
+                PrimarySource: AppArtifact
+              InputArtifacts:
+                - Name: AppArtifact
+              OutputArtifacts:
+                - Name: BuildOutput
+              RunOrder: 6
+
+            # post build resources
+            # secret rotation schedules
+            - Name: PostBuildResources
+              ActionTypeId:
+                Category: Deploy
+                Owner: AWS
+                Version: '1'
+                Provider: CloudFormation
+              Configuration:
+                ActionMode: CREATE_UPDATE
+                RoleArn: !GetAtt CloudFormationDeployRole.Arn
+                StackName: !Sub '${EnvironmentName}-post-build-resources'
+                TemplatePath: AppArtifact::infrastructure/stacks/post-build-resources.yml
+                Capabilities: CAPABILITY_AUTO_EXPAND,CAPABILITY_IAM
+                ParameterOverrides: !Sub
+                  - |
+                    {
+                      "DatabaseClusterArn": "#{DBVars.DatabaseClusterArnV2}",
+                      "DatabaseSubnetList": "${DATABASE_SUBNET_LIST}",
+                      "DatabaseSecurityGroup": "${VPCDefaultSecurityGroup}",
+                      "Env": "${EnvironmentName}",
+                      "secretRotationCodeVersionId": "#{DeployVars.secretRotationCodeVersionId}"
+                    }
+                  - DATABASE_SUBNET_LIST: !Join
+                      - ','
+                      - !Ref VPCPrivateSubnets
+              InputArtifacts:
+                - Name: AppArtifact
+              RunOrder: 7

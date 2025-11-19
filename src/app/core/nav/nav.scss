@@ -1,8 +1,45 @@
+nav {
+    --bs-navbar-padding-y: 0.125rem ;
+    --bas-navbar-padding-x: 0;
+
+    & > .container-fluid {
+        --bs-gutter-x: 0;
+    }
+}
+
 .nav-item {
-    .btn-link {
+    .nav-link {
         font-weight: 600;
         color: #BBBBBB;
         transition: all 0.2s ease-in-out 0s;
         text-decoration: none;
+        padding: 2rem 1rem;
+
+        & > .bi {
+            display: inline-flex;
+            scale: 2;
+            padding: 0 0.5rem;
+        }
+
+        &:focus,
+        &:hover {
+            color: #FFFFFF;
+        }
+    }
+
+    h6 {
+        padding: 0.25rem 1rem;
+        color: #AAAAAA;
+    }
+
+    &.show > .nav-link {
+        color: #FFFFFF;
+        background-color: #111111;
+    }
+}
+
+.game-menu {
+    .vr {
+        margin-left: 1.5rem;
     }
 }
