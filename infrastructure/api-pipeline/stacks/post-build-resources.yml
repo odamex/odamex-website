@@ -55,19 +55,6 @@ Resources:
       RotationLambdaARN: !GetAtt
         - SecretRotationScheduleHostedRotationLambda
         - Outputs.RotationLambdaARN
-  SecretRotationScheduleQuickSight:
-    Type: AWS::SecretsManager::RotationSchedule
-    Condition: EnableQuickSight
-    Properties:
-      SecretId: !Sub ${Env}DatabasePasswordQuickSight
-      RotateImmediatelyOnUpdate: false
-      RotationRules:
-        # We want to keep the rotation during night hours to reduce the likelihood
-        # of service failures while the password updates throughout all services
-        # So instead of 'rate(60 days)', this cron expression sets it to run at
-        # 02:00 on the 1st day of every odd month = ~every 60 days
-        ScheduleExpression: 'cron(0 2 1 1-11/2 ? *)'
-      RotationLambdaARN: !GetAtt
         - SecretRotationScheduleHostedRotationLambda
         - Outputs.RotationLambdaARN
   SecretRotationScheduleHostedRotationLambda:

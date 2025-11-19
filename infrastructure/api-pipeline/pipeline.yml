@@ -56,7 +56,7 @@ Parameters:
   GitHubOwner:
     Description: GitHub username owning the repo
     Type: String
-    Default: mathematica-org
+    Default: odamex
   GitHubTokenParameterName:
     Description: SSM Parameter Name of the GitHub token
     Type: AWS::SSM::Parameter::Name

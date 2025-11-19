@@ -37,7 +37,7 @@ import versions from './_versions';
 export const config: ApplicationConfiguration = {
   apiURL: '$API_DOMAIN',
   appDescription: '$Description',
-  appOwner: 'Mathematica',
+  appOwner: 'Odamex',
   appRoutes: {
     signIn: '/auth/signin',
     signOut: '/auth/signout',

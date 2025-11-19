@@ -479,7 +479,7 @@ Resources:
     Properties:
       DisplayName: !Sub odamex-${Env}-database-acu-alarm-topic
       Subscription:
-        - Endpoint: AWS-51095OdamexDev@mathematica-mpr.com
+        - Endpoint: support@odamex.net
           Protocol: email
       TopicName: !Sub odamex-${Env}-database-acu-alarm-topic
       Tags:

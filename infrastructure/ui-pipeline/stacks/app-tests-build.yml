@@ -62,7 +62,6 @@ Resources:
             build:
               commands:
                 - cd $CODEBUILD_SRC_DIR/
-                # - printf "@mathematica-org:registry = https://npm.pkg.github.com\n_authToken=$GITHUB_TOKEN\nalways-auth = true" > .npmrc
                 - npm i
                 - chmod +x config-generator.sh
                 - ./config-generator.sh ${EnvironmentName} ${AWS::Region} > src/_config.ts

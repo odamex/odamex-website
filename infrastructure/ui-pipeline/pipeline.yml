@@ -59,7 +59,7 @@ Parameters:
   GitHubOwner:
     Description: GitHub service account username owning the repo
     Type: String
-    Default: "mathematica-org"
+    Default: "odamex"
   AppRepo:
     Description: GitHub app repo name
     Type: String
