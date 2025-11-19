@@ -35,7 +35,7 @@ Parameters:
     Default: 'odamex'
   ProjectURL:
     Type: String
-    Default: 'odamex.mathematica-dev.org'
+    Default: 'odamex.net'
   WAFArn:
     Type: String
 
