@@ -58,11 +58,19 @@
           </li>
         </ul>
         <div class="d-flex align-items-center game-menu">
-            <div><button class="btn btn-success">Download</button></div>
-            <div><button class="btn btn-secondary">Servers</button></div>
+            <div><button class="btn btn-success"><i class="bi bi-download"></i><span>Download</span></button></div>
+            <div class="nav-item servers ms-2" ngbDropdown display="dynamic" placement="bottom-end">
+                <a href="#" class="nav-link position-relative ps-4 pe-4" tabindex="0" role="button">
+                    <i class="bi bi-hdd-stack-fill"></i>
+                    <span class="server-status position-absolute bg-success border border-light rounded-circle">
+                        <span class="visually-hidden">New alerts</span>
+                    </span>
+                </a>
+
+            </div>
             <div class="vr"></div>
             <div class="nav-item user-menu" ngbDropdown display="dynamic" placement="bottom-end">
-                <a class="nav-link" tabindex="0" ngbDropdownToggle id="nav-user" role="button"> <i class="bi bi-person-fill"></i></a>
+                <a class="nav-link ps-4 pe-4" tabindex="0" ngbDropdownToggle id="nav-user" role="button"><i class="bi bi-person-fill"></i></a>
             </div>
         </div>
       </div>
