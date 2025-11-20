@@ -7,5 +7,10 @@ import { Component } from '@angular/core';
   styleUrl: './footer.scss',
 })
 export class FooterComponent {
+  public today = new Date().getFullYear();
 
+  public scrollToTop($event: Event): void {
+    $event.preventDefault();
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
 }

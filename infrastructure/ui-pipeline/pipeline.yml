@@ -75,13 +75,13 @@ Parameters:
     Type: String
     Default: "67f7725c-6f97-4210-82d7-5512b31e9d03"
   VPCID:
-    Description: Existing VPC ID (provisioned by ITS)
+    Description: Existing VPC ID
     Type: AWS::EC2::VPC::Id
   VPCDefaultSecurityGroup:
     Description: Default security group associated with the existing VPC
     Type: AWS::EC2::SecurityGroup::Id
   WAFArn:
-    Description: WAF v2 Web ACL arn (provided by ITS)
+    Description: WAF v2 Web ACL arn
     Type: String
 
 Conditions:
@@ -105,7 +105,7 @@ Resources:
   CodePipelineServiceRole:
     Type: AWS::IAM::Role
     Properties:
-      RoleName: !Sub MathRole-CodePipelineServiceRole-${ProjectName}-${EnvironmentName}
+      RoleName: !Sub ${ProjectName}-${EnvironmentName}-CodePipelineServiceRole
       AssumeRolePolicyDocument:
         Version: 2012-10-17
         Statement:
@@ -114,7 +114,7 @@ Resources:
               Service: codepipeline.amazonaws.com
             Action: sts:AssumeRole
       Policies:
-        - PolicyName: !Sub MathPolicy-CodePipelineServiceRole-${ProjectName}-${EnvironmentName}
+        - PolicyName: !Sub ${ProjectName}-${EnvironmentName}-CodePipelineServicePolicy
           PolicyDocument:
             Version: 2012-10-17
             Statement:
@@ -145,7 +145,7 @@ Resources:
   CloudFormationDeployRole:
     Type: AWS::IAM::Role
     Properties:
-      RoleName: !Sub MathRole-CloudFormationDeployRole-${ProjectName}-${EnvironmentName}
+      RoleName: !Sub ${ProjectName}-${EnvironmentName}-CloudFormationDeployRole
       AssumeRolePolicyDocument:
         Version: 2012-10-17
         Statement:
@@ -154,7 +154,7 @@ Resources:
               Service: cloudformation.amazonaws.com
             Action: sts:AssumeRole
       Policies:
-        - PolicyName: !Sub MathPolicy-CloudFormationDeployRole-${ProjectName}-${EnvironmentName}
+        - PolicyName: !Sub ${ProjectName}-${EnvironmentName}-CloudFormationDeployPolicy
           PolicyDocument:
             Statement:
               - Effect: Allow
@@ -282,31 +282,6 @@ Resources:
               InputArtifacts:
                 - Name: SourceArtifact
               RunOrder: 1
-            - !If
-              - SetupVeracode
-              - Name: SASTScanBuild
-                Namespace: SASTScanVars
-                ActionTypeId:
-                  Category: Deploy
-                  Owner: AWS
-                  Version: "1"
-                  Provider: CloudFormation
-                Configuration:
-                  ActionMode: CREATE_UPDATE
-                  RoleArn: !GetAtt CloudFormationDeployRole.Arn
-                  StackName: !Sub "${ProjectName}-${EnvironmentName}-sast-scan"
-                  TemplatePath: SourceArtifact::infrastructure/stacks/sast-scan.yaml
-                  Capabilities: CAPABILITY_NAMED_IAM
-                  ParameterOverrides: !Sub |
-                    { 
-                      "EnvironmentName": "${EnvironmentName}",
-                      "ProjectName": "${ProjectName}",
-                      "VeracodeSandboxName": "aws-codebuild-${EnvironmentName}"
-                    }
-                InputArtifacts:
-                  - Name: SourceArtifact
-                RunOrder: 1
-              - !Ref AWS::NoValue
 
             # app unit test
             - Name: WebAppUnitTests
@@ -321,22 +296,6 @@ Resources:
               InputArtifacts:
                 - Name: SourceArtifact
               RunOrder: 2
-            # SAST scan
-            - !If
-              - SetupVeracode
-              - Name: SASTScan
-                ActionTypeId:
-                  Category: Build
-                  Owner: AWS
-                  Version: "1"
-                  Provider: CodeBuild
-                Configuration:
-                  ProjectName: "#{SASTScanVars.CodeScanProject}"
-                  PrimarySource: SourceArtifact
-                InputArtifacts:
-                  - Name: SourceArtifact
-                RunOrder: 3
-              - !Ref AWS::NoValue
 
         - Name: Resources
           Actions:
@@ -413,40 +372,3 @@ Resources:
               OutputArtifacts:
                 - Name: BuildOutput
               RunOrder: 1
-
-  # FailedCodePipelineEventRule:
-  #   Type: AWS::Events::Rule
-  #   Condition: DoEmailAlerts
-  #   Properties:
-  #     Description: Event rule that send notifications in case pipeline stage failed
-  #     EventPattern:
-  #       source:
-  #         - aws.codepipeline
-  #       detail-type:
-  #         - CodePipeline Stage Execution State Change
-  #       detail:
-  #         state:
-  #           - FAILED
-  #     State: ENABLED
-  #     Targets:
-  #       - Arn: !Ref MySNSTopic
-  #         Id: !Sub "${ProjectName}-${EnvironmentName}-SendEmailNotificationTarget"
-  #         InputTransformer:
-  #           InputPathsMap:
-  #             pipeline: $.detail.pipeline
-  #           InputTemplate: '"The Pipeline <pipeline> has failed"'
-
-  SourceWebHook:
-    Type: AWS::CodePipeline::Webhook
-    Condition: IsNotProd
-    Properties:
-      Authentication: GITHUB_HMAC
-      AuthenticationConfiguration:
-        SecretToken: "{{resolve:ssm:GitHubToken}}"
-      Filters:
-        - JsonPath: "$.ref"
-          MatchEquals: refs/heads/{Branch}
-      RegisterWithThirdParty: true
-      TargetAction: Application
-      TargetPipeline: !Ref Pipeline
-      TargetPipelineVersion: !GetAtt Pipeline.Version

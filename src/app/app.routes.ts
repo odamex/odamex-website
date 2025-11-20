@@ -26,4 +26,12 @@ export const routes: Routes = [
     path: 'download',
     loadComponent: () => import('./download/download').then((c) => c.Download),
   },
+  {
+    path: 'terms',
+    loadComponent: () => import('./terms/terms').then((c) => c.Terms),
+  },
+  {
+    path: 'privacy',
+    loadComponent: () => import('./privacy/privacy').then((c) => c.Privacy),
+  },
 ];

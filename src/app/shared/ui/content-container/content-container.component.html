@@ -1,0 +1,29 @@
+
+<div class="app-content-status" [class.invisible]="!loading() && !progress()">
+  <!-- progress bar -->
+</div>
+<div class="app-content-overlay" [class.loaded]="!loading()"></div>
+@if (!loading()) {
+  <div
+    class="animate__animated animate__faster animate__fadeIn app-content-wrapper d-flex flex-column flex-nowrap"
+  >
+    <div #contentContainerHeader class="app-content-header d-flex flex-column flex-nowrap ps-3 pe-3 mb-4">
+      @if (contentContainerTitle()) {
+        <h1 class="app-content-title fw-bold mt-3 mb-1">
+          <ng-content
+            select="app-content-container-title, [contentContainerTitle]"
+          ></ng-content>
+        </h1>
+      }
+      <ng-content
+        select="app-content-container-header, [contentContainerHeader]"
+      >
+      </ng-content>
+    </div>
+    <div class="app-content-container d-flex flex-column flex-nowrap ps-3 pe-3">
+      <div class="app-content-container-inner d-flex flex-column flex-nowrap">
+        <ng-content></ng-content>
+      </div>
+    </div>
+  </div>
+}

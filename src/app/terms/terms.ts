@@ -1,8 +1,10 @@
 import { Component } from '@angular/core';
+import { ContentContainerComponent } from "@shared/ui";
+import { ContentContainerTitleComponent } from "@shared/ui/content-container/content-container-subs";
 
 @Component({
   selector: 'app-terms',
-  imports: [],
+  imports: [ContentContainerComponent, ContentContainerTitleComponent],
   templateUrl: './terms.html',
   styleUrl: './terms.scss',
 })
