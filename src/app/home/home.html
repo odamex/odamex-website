@@ -9,9 +9,9 @@
                     <h1 class="fs-2 fw-semibold" [innerHTML]="item.title"></h1>
                     <p [innerHTML]="item.text" class="mt-3 mb-0"></p>
                         @if (item.buttons) {
-                            <div class="d-flex flex-row pt-4 buttons" [class.justify-content-end]="item.contentLocation === 'right'">
+                            <div class="d-flex flex-row buttons" [class.justify-content-end]="item.contentLocation === 'right'">
                             @for (button of item.buttons; track $index) {
-                                <a [href]="button.link" class="btn" [class]="button.styleClass">{{button.text}}</a>
+                                <a [href]="button.link" class="btn mt-4" [class]="button.styleClass">{{button.text}}</a>
                             }
                             </div>
                         }
@@ -20,33 +20,33 @@
         }
 	</ngb-carousel>
 }
-<div class="social-strip d-flex flex-row justify-content-between p-3 pt-4 pb-4">
+<div class="social-strip d-flex flex-row flex-wrap justify-content-between p-3 pt-4 pb-4">
     <div class="d-inline-flex flex-row align-items-center">
-        <!-- Patreon --><button></button>
-        <!-- github downloads -->
-        <!-- sourceforge downloads --> 
+        <span class="d-inline-flex align-items-center patreon-widget">
+            <a class="d-inline-flex align-items-center" target="_blank" href="https://patreon.com/Odamex"><span class="d-none d-lg-inline-block">Support us on</span><img src="/img/patreon_logo.png" /></a>
+        </span>
     </div>
     <div class="d-inline-flex flex-row align-items-center">
-        <h6>Find more Odamex players:</h6>
-        <div class="d-flex align-items-center badges">
+        <h6 class="d-none d-xl-block">Find more Odamex players:</h6>
+        <div class="d-flex align-items-center justify-content-center badges">
             <span class="d-inline-flex align-items-center steam-widget">						
-			    <a target="new" title="XXX steam users online now" href="http://steamcommunity.com/groups/odamex#members"><span class="onlinecount">XXX</span>&nbsp;/&nbsp;<span class="membercount">YYY</span></a>				
+			    <a target="_blank" title="XXX steam users online now" href="http://steamcommunity.com/groups/odamex#members"><span class="onlinecount">XXX</span><span class="d-none d-lg-inline-block membercount">&nbsp;/&nbsp;YYY</span></a>				
             </span>	
-            <span class="d-inline-flex discord-widget">
-                <a target="new" href="//discord.gg/3mKEnjx5P9" title="Join us on Discord">
-                    <object type="image/svg+xml" data="https://img.shields.io/discord/236518337671200768?style=for-the-badge&logo=%3Csvg%20role%3D%22img%22%20viewBox%3D%220%200%2024%2024%22%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%3E%3Ctitle%3EDiscord%3C%2Ftitle%3E%3Cpath%20d%3D%22M20.317%204.3698a19.7913%2019.7913%200%2000-4.8851-1.5152.0741.0741%200%2000-.0785.0371c-.211.3753-.4447.8648-.6083%201.2495-1.8447-.2762-3.68-.2762-5.4868%200-.1636-.3933-.4058-.8742-.6177-1.2495a.077.077%200%2000-.0785-.037%2019.7363%2019.7363%200%2000-4.8852%201.515.0699.0699%200%2000-.0321.0277C.5334%209.0458-.319%2013.5799.0992%2018.0578a.0824.0824%200%2000.0312.0561c2.0528%201.5076%204.0413%202.4228%205.9929%203.0294a.0777.0777%200%2000.0842-.0276c.4616-.6304.8731-1.2952%201.226-1.9942a.076.076%200%2000-.0416-.1057c-.6528-.2476-1.2743-.5495-1.8722-.8923a.077.077%200%2001-.0076-.1277c.1258-.0943.2517-.1923.3718-.2914a.0743.0743%200%2001.0776-.0105c3.9278%201.7933%208.18%201.7933%2012.0614%200a.0739.0739%200%2001.0785.0095c.1202.099.246.1981.3728.2924a.077.077%200%2001-.0066.1276%2012.2986%2012.2986%200%2001-1.873.8914.0766.0766%200%2000-.0407.1067c.3604.698.7719%201.3628%201.225%201.9932a.076.076%200%2000.0842.0286c1.961-.6067%203.9495-1.5219%206.0023-3.0294a.077.077%200%2000.0313-.0552c.5004-5.177-.8382-9.6739-3.5485-13.6604a.061.061%200%2000-.0312-.0286zM8.02%2015.3312c-1.1825%200-2.1569-1.0857-2.1569-2.419%200-1.3332.9555-2.4189%202.157-2.4189%201.2108%200%202.1757%201.0952%202.1568%202.419%200%201.3332-.9555%202.4189-2.1569%202.4189zm7.9748%200c-1.1825%200-2.1569-1.0857-2.1569-2.419%200-1.3332.9554-2.4189%202.1569-2.4189%201.2108%200%202.1757%201.0952%202.1568%202.419%200%201.3332-.946%202.4189-2.1568%202.4189Z%22%2F%3E%3C%2Fsvg%3E&logoSize=auto&color=%237289da&link=https%3A%2F%2Fdiscord.gg%2F3mKEnjx5P9" class="discord-logo"></object>
+            <span class="d-inline-flex align-items-center discord-widget">
+                <a class="d-inline-flex align-items-center" target="_blank" href="//discord.gg/3mKEnjx5P9" title="Join us on Discord">
+                    <object type="image/svg+xml" data="https://img.shields.io/discord/236518337671200768?style=for-the-badge&logo=discord&logoColor=white&labelColor=%230E0E0E&color=%237289da&cacheSeconds=600&link=https%3A%2F%2Fdiscord.gg%2F2F3mKEnjx5P9" class="discord-logo"></object>
                 </a>
             </span>
         </div>
     </div>
 </div>
 @if (downloadLinks.length > 0) {
-    <div class="content download-strip text-center p-5">
+    <div class="content download-strip d-none d-md-flex flex-column text-center p-5">
         <h2>Download Now for Your Platform</h2>
         <p>Each stable package includes client, server, and launcher applications.</p>
-        <div class="items p-5">
+        <div class="items p-3">
             <div>
-                <div ngbDropdown class="d-inline-block btn-group dropdown-download" placement="bottom-end"  data-bs-theme="dark">
+                <div ngbDropdown class="d-inline-flex btn-group dropdown-download pb-4" placement="bottom-end" data-bs-theme="dark">
                     <a class="btn btn-success btn-lg" id="home-download" [href]="primaryDownloadLink?.link" role="button">
                         <i class="bi bi-{{primaryDownloadLink?.icon}}"></i><span>{{primaryDownloadLink?.text}}</span>
                     </a>
@@ -61,6 +61,10 @@
                         }
                     </div>
                 </div>
+                <div class="d-flex justify-content-center align-items-center p-4 badges">
+                    <object type="image/svg+xml" data="https://img.shields.io/github/downloads/odamex/odamex/total?style=for-the-badge&label=GitHub%20Downloads&cacheSeconds=600&link=https%3A%2F%2Fgithub.com%2Fodamex%2Fodamex%2Freleases%2Flatest" class="github-downloads"></object>
+                    <object type="image/svg+xml" data="https://img.shields.io/sourceforge/dt/Odamex?style=for-the-badge&label=Sourceforge%20Downloads&color=%23ff6600&cacheSeconds=600&link=https%3A%2F%2Fsourceforge.net%2Fprojects%2Fodamex" class="sourceforge-downloads"></object>
+                </div>
             </div>
         </div>
     </div>
@@ -72,9 +76,9 @@
 <div class="content dev-strip text-center p-5">
     <h2>Latest Development Updates</h2>
     <div class="d-flex flex-row justify-content-center p-4 badges">
-        <a target="new" href="https://github.com/odamex/odamex/actions?query=workflow%3AWindows"><img src="https://github.com/odamex/odamex/actions/workflows/windows.yml/badge.svg?branch=stable"></a>
-		<a target="new" href="https://github.com/odamex/odamex/actions?query=workflow%3AmacOS"><img src="https://github.com/odamex/odamex/actions/workflows/macos.yml/badge.svg?branch=stable"></a> 
-		<a target="new" href="https://github.com/odamex/odamex/actions?query=workflow%3ALinux"><img src="https://github.com/odamex/odamex/actions/workflows/linux.yml/badge.svg?branch=stable"></a>
+        <a target="_blank" href="https://github.com/odamex/odamex/actions?query=workflow%3AWindows"><img src="https://github.com/odamex/odamex/actions/workflows/windows.yml/badge.svg?branch=stable"></a>
+		<a target="_blank" href="https://github.com/odamex/odamex/actions?query=workflow%3AmacOS"><img src="https://github.com/odamex/odamex/actions/workflows/macos.yml/badge.svg?branch=stable"></a> 
+		<a target="_blank" href="https://github.com/odamex/odamex/actions?query=workflow%3ALinux"><img src="https://github.com/odamex/odamex/actions/workflows/linux.yml/badge.svg?branch=stable"></a>
     </div>
     <div class="d-flex flex-row">
         <div class="changelog"></div>
@@ -86,11 +90,11 @@
         <h2>Doom, Doom II & More</h2>
         <p>ODAMEX is compatible with the following games:</p>
         <span class="d-flex justify-content-center flex-wrap game-icons">
-            <a title="Doom and Ultimate Doom" alt="Doom and Ultimate Doom" target="new" href="https://doomwiki.org/wiki/Doom"><img src="/assets/icons/icon-doom-128.png"></a>
-            <a title="Doom II" alt="Doom II" target="new" href="https://doomwiki.org/wiki/Doom_II"><img src="/assets/icons/icon-doom2-128.png"></a>
-            <a title="Final Doom" alt="Final Doom" target="new" href="https://doomwiki.org/wiki/Final_Doom"><img src="/assets/icons/icon-finaldoom-128.png"></a>
-            <a title="Chex Quest" alt="Chex Quest" target="new" href="https://doomwiki.org/wiki/Chex_Quest"><img src="/assets/icons/icon-chexquest-128.png"></a>
-            <a title="FreeDoom" alt="FreeDoom" target="new" href="https://doomwiki.org/wiki/FreeDoom"><img src="/assets/icons/icon-freedoom-128.png"></a>
+            <a title="Doom and Ultimate Doom" alt="Doom and Ultimate Doom" target="_blank" href="https://doomwiki.org/wiki/Doom"><img src="/assets/icons/icon-doom-128.png"></a>
+            <a title="Doom II" alt="Doom II" target="_blank" href="https://doomwiki.org/wiki/Doom_II"><img src="/assets/icons/icon-doom2-128.png"></a>
+            <a title="Final Doom" alt="Final Doom" target="_blank" href="https://doomwiki.org/wiki/Final_Doom"><img src="/assets/icons/icon-finaldoom-128.png"></a>
+            <a title="Chex Quest" alt="Chex Quest" target="_blank" href="https://doomwiki.org/wiki/Chex_Quest"><img src="/assets/icons/icon-chexquest-128.png"></a>
+            <a title="FreeDoom" alt="FreeDoom" target="_blank" href="https://doomwiki.org/wiki/FreeDoom"><img src="/assets/icons/icon-freedoom-128.png"></a>
         </span>
     </div>
     <div class="pt-4 pb-4">

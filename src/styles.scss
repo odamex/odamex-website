@@ -34,6 +34,12 @@ a:not(.btn), a:not(.btn):visited, a:not(.btn):link {
 /*****************************************/
 /* Bootstrap Override Styles */
 /*****************************************/
+
+.btn {
+    --bs-btn-border-radius: 40rem;
+    --bs-btn-padding-x: 1rem;
+}
+
 .dropdown-menu {
     --bs-box-shadow-sm: 0 .125rem .25rem rgba(0, 0, 0, 0.5);
     --bs-dropdown-rgb: 33, 37, 41;

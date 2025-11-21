@@ -8,8 +8,8 @@ ngb-carousel {
 .img-wrapper {
     width: 100%;
     min-height: 480px;
-    height: 80vh;
-    max-height: 720px;
+    height: 85%;
+    max-height: 2000px;
     display: flex;
     justify-content: center;
     align-items: center;
@@ -18,20 +18,25 @@ ngb-carousel {
     img {
         width: 100%;
         height: 100%;
-        min-height: 640px;
+        min-width: 1400px;
+        object-fit: cover;
+        min-height: 480px;
     }
 }
 
 .carousel-caption {
     padding: 1rem;
     border-radius: 0.5rem;
-    top: 10rem;
+    top: max(7rem, 10vh);
     bottom: auto;
     max-width: 42rem;
     text-align: left;
+    font-size: clamp(0.75rem, 0.5681818181rem + 0.727272vw, 1.25rem);
+    background: rgba(0, 0, 0, 0.5);
+    color: #fff;
 
-    h1, p {
-        color: #fff;
+    p {
+        line-height: 1.35;
     }
 
     h1 {
@@ -40,15 +45,6 @@ ngb-carousel {
 
     .buttons {
         gap: 1rem;
-    }
-
-    &.overlay {
-        background: rgba(0, 0, 0, 0.5);
-    }
-
-    &.right {
-        left: auto;
-        text-align: right;
     }
 }
 
@@ -85,8 +81,11 @@ ngb-carousel {
 }
 
 .social-strip {
+    gap: 1rem;
+
     & > div {
         gap: 1rem;
+        margin: auto;
     }
     h6 {
         margin-bottom: 0;
@@ -101,22 +100,64 @@ ngb-carousel {
         }
     }
 
-    .steam-widget {
+    .discord-widget {
         box-shadow: 0 1px 0 rgba(255, 255, 255, 0.1) inset, 0 1px 0 rgba(255, 255, 255, 0.075);
         border-color: rgba(0, 0, 0, 0.1) rgba(0, 0, 0, 0.1) rgba(0, 0, 0, 0.25);
-        border-radius: 2px 2px 2px 2px;
+        border-radius: 40rem;
         border-style: solid;
         border-width: 1px;
         background-color: #0E0E0E;
         background-image: linear-gradient(to bottom, #151515, #040404);
         background-repeat: repeat-x;
         border-color: rgba(0, 0, 0, 0.1) rgba(0, 0, 0, 0.1) rgba(0, 0, 0, 0.25);
+        padding: 0.1875rem 0.25rem;
+
+        object {
+            border-radius: 40rem;
+        }
+    }
+
+    .patreon-widget {
+        box-shadow: 0 1px 0 rgba(255, 255, 255, 0.1) inset, 0 1px 0 rgba(255, 255, 255, 0.075);
+        border-color: rgba(0, 0, 0, 0.1) rgba(0, 0, 0, 0.1) rgba(0, 0, 0, 0.25);
+        border-radius: 40rem;
+        border-style: solid;
+        border-width: 1px;
+        background-color: #0E0E0E;
+        background-image: linear-gradient(to bottom, #151515, #040404);
+        background-repeat: repeat-x;
+        border-color: rgba(0, 0, 0, 0.1) rgba(0, 0, 0, 0.1) rgba(0, 0, 0, 0.25);
+        padding: 0.25rem 1.25rem;
+        white-space: nowrap;
+        margin-right: 0.5rem;
+        a {
+            gap: 0.5rem;
+            color: #DDDDDD;
+            text-decoration: none;
+            font-size: 85%;
+            img {
+                filter: invert(1);
+                height: 26px;
+            }
+        }
+    }
+
+    .steam-widget {
+        box-shadow: 0 1px 0 rgba(255, 255, 255, 0.1) inset, 0 1px 0 rgba(255, 255, 255, 0.075);
+        border-color: rgba(0, 0, 0, 0.1) rgba(0, 0, 0, 0.1) rgba(0, 0, 0, 0.25);
+        border-radius: 40rem;
+        border-style: solid;
+        border-width: 1px;
+        background-color: #0E0E0E;
+        background-image: linear-gradient(to bottom, #151515, #040404);
+        background-repeat: repeat-x;
+        border-color: rgba(0, 0, 0, 0.1) rgba(0, 0, 0, 0.1) rgba(0, 0, 0, 0.25);
+        padding: 0.25rem 1.25rem;
 
         a {
             color: #DDD;
             padding-left: 48px;
             background: url(/img/steamwidget_logo.png) no-repeat scroll left center transparent;
-            margin: 2px 8px;
             padding-top: 1px;
             padding-bottom: 1px;
             text-decoration: none;
@@ -125,6 +166,36 @@ ngb-carousel {
         .onlinecount {
             font-weight: bold;
             color: #62A7E3;
+        }
+    }
+}
+
+/* Media Queries */
+
+/* MD */
+@media (min-width: 768px) {
+    .carousel-caption {
+        top: clamp(8rem, 25%, 40rem);
+        background: transparent;
+
+        &.overlay {
+            background: rgba(0, 0, 0, 0.5);
+        }
+    }
+    .social-strip {
+        & > div {
+            margin: unset;
+        }
+    }
+}
+
+/* LG */
+@media (min-width: 992px) {
+    
+    .carousel-caption {
+        &.right {
+            left: auto;
+            text-align: right;
         }
     }
 }

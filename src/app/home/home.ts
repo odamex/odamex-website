@@ -1,6 +1,8 @@
 import { Component, viewChild } from '@angular/core';
+import { DownloadLink } from '@core/models';
 import { NgbCarousel, NgbCarouselModule, NgbDropdownModule } from '@ng-bootstrap/ng-bootstrap';
 import { getOS } from '@shared/utilities';
+import { downloadLinks } from '@shared/utilities/download-links';
 
 interface CarouselItem {
     title: string;
@@ -9,14 +11,6 @@ interface CarouselItem {
     contentLocation: string;
     showContentOverlay: boolean;
     buttons?: { text: string; link: string; styleClass: string }[];
-}
-
-interface downloadLink {
-  os: string;
-  icon: string;
-  link: string;
-  text: string;
-  primary?: boolean;
 }
 
 @Component({
@@ -34,7 +28,7 @@ export class Home {
       contentLocation: 'left',
       showContentOverlay: false,
       buttons: [
-        { text: 'Download Odamex', link: '/download', styleClass: 'btn-primary' },
+        { text: 'Download Odamex', link: '/download', styleClass: 'btn-primary d-none d-md-inline-block' },
       ]
     },
     { 
@@ -67,46 +61,18 @@ export class Home {
     },
   ];
   
-  public downloadLinks!: downloadLink[];
+  public downloadLinks!: DownloadLink[];
 
   public carousel = viewChild.required<NgbCarousel>('carousel');
 
   constructor() {
-    this.downloadLinks = this.getDownloadLinks();
+    const version = '11.2.0';
+    this.downloadLinks = downloadLinks(version);
   }
 
   ngAfterViewInit() {this.carousel().pause();}
 
-  public get primaryDownloadLink(): downloadLink | undefined {
+  public get primaryDownloadLink(): DownloadLink | undefined {
     return this.downloadLinks.find(link => link.primary);
-  }
-
-  private getDownloadLinks(): downloadLink[] {
-    const os = getOS();
-    const version = '11.2.0';
-    switch (os) {
-      case 'win':
-        return [
-          {os, icon: 'windows', link: `https://github.com/odamex/odamex/releases/download/${version}/odamex-win-${version}.exe`, text: `${version} Windows 32/64 bit Installer`, primary: true},
-          {os, icon: 'windows', link: `https://github.com/odamex/odamex/releases/download/${version}/odamex-win64-${version}.zip`, text: `${version} Windows 64-bit Zip`},
-          {os, icon: 'windows', link: `https://github.com/odamex/odamex/releases/download/${version}/odamex-win32-${version}.zip`, text: `${version} Windows 32-bit Zip`},
-          {os, icon: 'code', link: `https://github.com/odamex/odamex/releases/download/${version}/odamex-src-${version}.tar.bz2`, text: `${version} Universal Source Package`}
-        ];
-      case 'macos':
-        return [
-          {os, icon: 'apple', link: `https://github.com/odamex/odamex/releases/download/${version}/odamex-macos-${version}.dmg`, text: `${version} MacOS 10.15+ Intel 64-bit Installer`, primary: true},
-          {os, icon: 'code', link: `https://github.com/odamex/odamex/releases/download/${version}/odamex-src-${version}.tar.bz2`, text: `${version} Universal Source Package`}
-        ];
-      case 'linux':
-        return [
-          {os, icon: 'tux', link: `https://github.com/odamex/odamex/releases/download/${version}/odamex-linux-x86_64-${version}.flatpak`, text: `${version} Linux Flatpak`, primary: true},
-          {os, icon: 'tux', link: `https://github.com/odamex/odamex/releases/download/${version}/odamex-linux-arm64-${version}.flatpak`, text: `${version} Linux Flatpak`},
-          {os, icon: 'code', link: `https://github.com/odamex/odamex/releases/download/${version}/odamex-src-${version}.tar.bz2`, text: `${version} Universal Source Package`}
-        ];
-      default:
-        return [
-          {os, icon: 'code', link: `https://github.com/odamex/odamex/releases/download/${version}/odamex-src-${version}.tar.bz2`, text: `${version} Universal Source Package`, primary: true}
-        ];
-    }
   }
 }

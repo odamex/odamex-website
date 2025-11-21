@@ -34,6 +34,7 @@
     "@ng-bootstrap/ng-bootstrap": "^19.0.1",
     "@ng-icons/bootstrap-icons": "^32.4.0",
     "@ng-icons/core": "^32.4.0",
+    "@ngrx/signals": "^20.1.0",
     "@popperjs/core": "^2.11.8",
     "@saithodev/ts-appversion": "^2.2.0",
     "bootstrap": "^5.3.8",
