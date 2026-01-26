@@ -1,23 +1,26 @@
 AWSTemplateFormatVersion: 2010-09-09
-Description: The resources used to create the WebApp environment.
+Description: The resources used to create the WebApp EnvironmentName.
 Parameters:
-  Env:
+  EnvironmentName:
     Type: String
-    Description: The name for the environment that this cloudformation will be part of.
+    Description: The name for the EnvironmentName that this cloudformation will be part of.
+  ProjectName:
+    Description: Primary project name
+    Type: String
+    Default: 'odamex'
   GitHubTokenParameterName:
     Type: String
     NoEcho: true
 
 Conditions:
-  TestStage: !Equals [!Ref Env, test]
+  TestStage: !Equals [!Ref EnvironmentName, test]
   NotTestStage: !Not [Condition: TestStage]
 
 Resources:
   CodeTestBuildServiceRole:
     Type: 'AWS::IAM::Role'
     Properties:
-      RoleName: !Sub MathRole-CodeTestBuildServiceRole-${Env}
-      PermissionsBoundary: !Sub arn:aws:iam::${AWS::AccountId}:policy/Math-Boundary-Policy
+      RoleName: !Sub ${ProjectName}-${EnvironmentName}-CodeTestBuildServiceRole
       AssumeRolePolicyDocument:
         Version: 2012-10-17
         Statement:
@@ -26,7 +29,7 @@ Resources:
               Service: codebuild.amazonaws.com
             Action: 'sts:AssumeRole'
       Policies:
-        - PolicyName: !Sub MathPolicy-CodeTestBuildServiceRole-${Env}
+        - PolicyName: !Sub ${ProjectName}-${EnvironmentName}-CodeTestBuildServiceRole
           PolicyDocument:
             Version: 2012-10-17
             Statement:
@@ -69,29 +72,19 @@ Resources:
             build:
               commands:
                 - npm install -g typescript
-                - cd $CODEBUILD_SRC_DIR/lambdas
-                # REST PORTAL API
-                - cd rest-portal-api 
+                - cd $CODEBUILD_SRC_DIR/api/src
+                # REST API LAMBDA TESTS
                 - npm install 
                 - tsc 
                 - npm prune --omit=dev
-                # DATA QUALITY CHECKS
-                - cd ../data-quality-checks 
-                - npm install 
-                - tsc 
-                - npm prune --omit=dev
-                # FILE UPLOAD PROCESSING
-                - cd ../file-upload-processing
       Environment:
         ComputeType: BUILD_GENERAL1_MEDIUM
         Image: 'aws/codebuild/amazonlinux2-x86_64-standard:5.0'
         Type: LINUX_CONTAINER
         EnvironmentVariables:
-          - Name: ENV
-            Value: !Ref Env
-          - Name: GITHUB_TOKEN
-            Value: !Sub '{{resolve:ssm:${GitHubTokenParameterName}}}'
-      Name: !Sub ${Env}-CodeTestBuildProject
+          - Name: EnvironmentName
+            Value: !Ref EnvironmentName
+      Name: !Sub ${ProjectName}-${EnvironmentName}-CodeTestBuildProject
       ServiceRole: !Ref CodeTestBuildServiceRole
     #   VpcConfig:
     #     VpcId: !Ref VPC

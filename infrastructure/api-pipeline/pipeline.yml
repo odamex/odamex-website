@@ -9,6 +9,7 @@ Metadata:
           - EnvironmentName
           - ProjectName
           - ProjectURL
+          - HostedZoneId
           - EmailDomainSourceArn
       - Label:
           default: Source Repository Information
@@ -64,6 +65,9 @@ Parameters:
     Description: URL for the web application
     Type: String
     Default: ''
+  HostedZoneId:
+    Description: Route 53 hosted zone ID for the API custom domain
+    Type: String
   VPCID:
     Description: Existing VPC ID (provisioned by ITS)
     Type: AWS::EC2::VPC::Id
@@ -288,8 +292,8 @@ Resources:
                   Capabilities: CAPABILITY_NAMED_IAM
                   ParameterOverrides: !Sub |
                     { 
-                      "Env": "${EnvironmentName}",
-                      "GitHubTokenParameterName": "${GitHubTokenParameterName}"
+                      "EnvironmentName": "${EnvironmentName}",
+                      "ProjectName": "${ProjectName}",
                     }
                 InputArtifacts:
                   - Name: AppArtifact
@@ -325,10 +329,10 @@ Resources:
                 StackName: !Sub '${ProjectName}-${EnvironmentName}-database'
                 TemplatePath: AppArtifact::infrastructure/stacks/db.yml
                 Capabilities: CAPABILITY_NAMED_IAM
-                ParameterOverrides: !Sub
-                  - |
+                ParameterOverrides: !Sub |
                     {
-                      "Env": "${EnvironmentName}",
+                      "EnvironmentName": "${EnvironmentName}",
+                      "ProjectName": "${ProjectName}",
                       "DatabaseSubnetList": "${VPCPrivateSubnets}",
                       "VPCID": "${VPCID}",
                       "VPCDefaultSecurityGroup": "${VPCDefaultSecurityGroup}"
@@ -356,38 +360,13 @@ Resources:
                     "DBAdminSecret": "#{DBVars.DBAdminPasswordV2}",
                     "DBClusterArn": "#{DBVars.DatabaseClusterArnV2}",
                     "EmailDomainSourceArn": "${EmailDomainSourceArn}",
-                    "Env": "${EnvironmentName}",
+                    "EnvironmentName": "${EnvironmentName}",
+                    "ProjectName": "${ProjectName}",
                     "ProjectURL": "${ProjectURL}"
                   }
               InputArtifacts:
                 - Name: AppArtifact
               RunOrder: 2
-
-            # Data Processing
-            - Name: DataProcessing
-              Namespace: DataProcessingVars
-              ActionTypeId:
-                Category: Deploy
-                Owner: AWS
-                Version: '1'
-                Provider: CloudFormation
-              Configuration:
-                ActionMode: CREATE_UPDATE
-                RoleArn: !GetAtt CloudFormationDeployRole.Arn
-                StackName: !Sub '${ProjectName}-${EnvironmentName}-data-processing'
-                TemplatePath: AppArtifact::infrastructure/stacks/data-processing.yml
-                Capabilities: CAPABILITY_NAMED_IAM
-                ParameterOverrides: !Sub |
-                  {
-                    "Env": "${EnvironmentName}",
-                    "UserPoolId": "#{AuthVars.UserPoolId}",
-                    "UserPoolArn": "#{AuthVars.UserPoolArn}",
-                    "DBAdminSecret": "#{DBVars.DBAdminPasswordV2}",
-                    "DBClusterArn": "#{DBVars.DatabaseClusterArnV2}"
-                  }
-              InputArtifacts:
-                - Name: AppArtifact
-              RunOrder: 3
 
             #ApiSocketVars - API Socket
             - Name: APIRest
@@ -403,25 +382,19 @@ Resources:
                 StackName: !Sub '${ProjectName}-${EnvironmentName}-api-rest'
                 TemplatePath: AppArtifact::infrastructure/stacks/api-rest.yml
                 Capabilities: CAPABILITY_AUTO_EXPAND,CAPABILITY_NAMED_IAM
-                ParameterOverrides: !Sub
-                  - |
+                ParameterOverrides: !Sub |
                     { 
                       "DatabaseSecurityGroup": "${VPCDefaultSecurityGroup}",
                       "DatabaseSubnetList": "${VPCPrivateSubnets}",
                       "DBAdminSecret": "#{DBVars.DBAdminPasswordV2}",
-                      "DBClusterArn": "#{DBVars.DatabaseClusterArnV2}",
-                      "GoogleMapsApiKeyParameterName": "${GoogleMapsApiKeyParameterName}",
-                      "Env": "${EnvironmentName}",
+                      "EnvironmentName": "${EnvironmentName}",
                       "ProjectName": "${ProjectName}",
+                      "HostedZoneId": "${HostedZoneId}",
                       "ProjectURL": "${ProjectURL}",
-                      "S3UserUploadName": "#{DataProcessingVars.S3UserUploadName}",
                       "UserPoolId": "#{AuthVars.UserPoolId}",
                       "UserPoolArn": "#{AuthVars.UserPoolArn}",  
                       "WAFArn": "${WAFArn}"
                     }
-                  - DATABASE_SUBNET_LIST: !Join
-                      - ','
-                      - !Ref VPCPrivateSubnets
               InputArtifacts:
                 - Name: AppArtifact
               RunOrder: 4
@@ -440,14 +413,14 @@ Resources:
                 StackName: !Sub '${ProjectName}-${EnvironmentName}-app-build-project'
                 TemplatePath: AppArtifact::infrastructure/stacks/app-build.yml
                 Capabilities: CAPABILITY_NAMED_IAM
-                ParameterOverrides: !Sub
-                  - |
+                ParameterOverrides: !Sub |
                     { 
-                      "Env": "${EnvironmentName}",
+                      "EnvironmentName": "${EnvironmentName}",
+                      "ProjectName": "${ProjectName}",
                       "VPC": "${VPCID}",
                       "PrivateSubnets": "${VPCPrivateSubnets}",
                       "SecurityGroup": "${VPCDefaultSecurityGroup}",
-                      "DBAdminPassword": "#{DBVars.DBAdminPasswordV2}",
+                      "DBAdminSecret": "#{DBVars.DBAdminPasswordV2}",
                       "DBClusterArn": "#{DBVars.DatabaseClusterArnV2}"
                     }
               InputArtifacts:

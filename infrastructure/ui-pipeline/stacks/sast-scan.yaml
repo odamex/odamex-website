@@ -18,7 +18,7 @@ Resources:
   CodeScanServiceRole:
     Type: AWS::IAM::Role
     Properties:
-      RoleName: !Sub MathRole-SASTScanServiceRole-${ProjectName}-${EnvironmentName}
+      RoleName: !Sub ${ProjectName}-${EnvironmentName}-SASTScanServiceRole-${ProjectName}-${EnvironmentName}
       AssumeRolePolicyDocument:
         Version: 2012-10-17
         Statement:
@@ -28,7 +28,7 @@ Resources:
               Service:
                 - codebuild.amazonaws.com
       Policies:
-        - PolicyName: !Sub MathPolicy-SASTScanServiceRole-${ProjectName}-${EnvironmentName}
+        - PolicyName: !Sub ${ProjectName}-${EnvironmentName}-SASTScanServiceRole-${ProjectName}-${EnvironmentName}
           PolicyDocument:
             Version: 2012-10-17
             Statement:

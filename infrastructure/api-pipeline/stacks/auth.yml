@@ -1,10 +1,14 @@
 AWSTemplateFormatVersion: 2010-09-09
 Description: Cognito Stack
 Parameters:
-  Env:
+  EnvironmentName:
     Type: String
     Description: Environment name for cognito resources
     Default: dev
+  ProjectName:
+    Description: Primary project name
+    Type: String
+    Default: 'odamex'
   ProjectURL:
     Type: String
     Default: "odamex.net"
@@ -28,16 +32,16 @@ Parameters:
 
 Conditions:
   IsLocal: !Equals
-    - !Ref Env
+    - !Ref EnvironmentName
     - local
   IsDev: !Equals
-    - !Ref Env
+    - !Ref EnvironmentName
     - dev
   IsQa: !Equals
-    - !Ref Env
+    - !Ref EnvironmentName
     - qa
   IsStaging: !Equals
-    - !Ref Env
+    - !Ref EnvironmentName
     - stg
   # Note: we only run the Burpsuite security scan in the dev environment, so
   # theoretically we should only need the security scan resources in dev.
@@ -61,8 +65,7 @@ Resources:
   SNSRole:
     Type: "AWS::IAM::Role"
     Properties:
-      RoleName: !Sub MathRole-SNSRole-${Env}
-      PermissionsBoundary: !Sub arn:aws:iam::${AWS::AccountId}:policy/Math-Boundary-Policy
+      RoleName: !Sub ${ProjectName}-${EnvironmentName}-SNSRole
       AssumeRolePolicyDocument:
         Version: 2012-10-17
         Statement:
@@ -73,7 +76,7 @@ Resources:
             Action:
               - "sts:AssumeRole"
       Policies:
-        - PolicyName: !Sub MathPolicy-CognitoSNSPolicy-${Env}
+        - PolicyName: !Sub ${ProjectName}-${EnvironmentName}-CognitoSNSPolicy
           PolicyDocument:
             Version: 2012-10-17
             Statement:
@@ -88,8 +91,7 @@ Resources:
   CognitoAuthLambdasRole:
     Type: "AWS::IAM::Role"
     Properties:
-      RoleName: !Sub MathRole-CognitoLambdasRole-${Env}
-      PermissionsBoundary: !Sub arn:aws:iam::${AWS::AccountId}:policy/Math-Boundary-Policy
+      RoleName: !Sub ${ProjectName}-${EnvironmentName}-CognitoLambdasRole
       AssumeRolePolicyDocument:
         Version: 2012-10-17
         Statement:
@@ -98,7 +100,7 @@ Resources:
               Service: lambda.amazonaws.com
             Action: sts:AssumeRole
       Policies:
-        - PolicyName: !Sub MathPolicy-CognitoAuthorizedPolicy-${Env}
+        - PolicyName: !Sub ${ProjectName}-${EnvironmentName}-CognitoAuthorizedPolicy
           PolicyDocument:
             Version: 2012-10-17
             Statement:
@@ -161,8 +163,7 @@ Resources:
   CognitoUnAuthorizedRole:
     Type: "AWS::IAM::Role"
     Properties:
-      RoleName: !Sub MathRole-CognitoUnAuthorizedRole-${Env}
-      PermissionsBoundary: !Sub arn:aws:iam::${AWS::AccountId}:policy/Math-Boundary-Policy
+      RoleName: !Sub ${ProjectName}-${EnvironmentName}-CognitoUnAuthorizedRole
       AssumeRolePolicyDocument:
         Version: 2012-10-17
         Statement:
@@ -177,7 +178,7 @@ Resources:
               "ForAnyValue:StringLike":
                 "cognito-identity.amazonaws.com:amr": unauthenticated
       Policies:
-        - PolicyName: !Sub MathPolicy-CognitoUnauthorizedPolicy-${Env}
+        - PolicyName: !Sub ${ProjectName}-${EnvironmentName}-CognitoUnauthorizedPolicy
           PolicyDocument:
             Version: 2012-10-17
             Statement:
@@ -190,8 +191,7 @@ Resources:
   CognitoAuthorizedRole:
     Type: "AWS::IAM::Role"
     Properties:
-      RoleName: !Sub MathRole-CognitoAuthorizedRole-${Env}
-      PermissionsBoundary: !Sub arn:aws:iam::${AWS::AccountId}:policy/Math-Boundary-Policy
+      RoleName: !Sub ${ProjectName}-${EnvironmentName}-CognitoAuthorizedRole
       AssumeRolePolicyDocument:
         Version: 2012-10-17
         Statement:
@@ -206,7 +206,7 @@ Resources:
               "ForAnyValue:StringLike":
                 "cognito-identity.amazonaws.com:amr": authenticated
       Policies:
-        - PolicyName: !Sub MathPolicy-CognitoAuthorizedPolicy-${Env}
+        - PolicyName: !Sub ${ProjectName}-${EnvironmentName}-CognitoAuthorizedPolicy
           PolicyDocument:
             Version: 2012-10-17
             Statement:
@@ -221,7 +221,7 @@ Resources:
     Type: "AWS::Lambda::Function"
     Condition: CreateSecurityScanResources
     Properties:
-      FunctionName: !Sub "${Env}-create-auth-challenge"
+      FunctionName: !Sub "${ProjectName}-${EnvironmentName}-create-auth-challenge"
       Handler: index.handler
       MemorySize: 128
       Role: !GetAtt CognitoAuthLambdasRole.Arn
@@ -245,7 +245,7 @@ Resources:
     Type: "AWS::Lambda::Function"
     Condition: CreateSecurityScanResources
     Properties:
-      FunctionName: !Sub "${Env}-define-auth-challenge"
+      FunctionName: !Sub "${ProjectName}-${EnvironmentName}-define-auth-challenge"
       Handler: index.handler
       MemorySize: 128
       Role: !GetAtt CognitoAuthLambdasRole.Arn
@@ -277,7 +277,7 @@ Resources:
               ) {
                 const client = new SSMClient();
                 const input = {
-                  Name: process.env.BURP_SUITE_PARAM_NAME,
+                  Name: process.EnvironmentName.BURP_SUITE_PARAM_NAME,
                 };
                 const command = new GetParameterCommand(input);
                 const response = await client.send(command);
@@ -326,7 +326,7 @@ Resources:
   LambdaCustomEmails:
     Type: "AWS::Lambda::Function"
     Properties:
-      FunctionName: !Sub "${Env}-custom-emails"
+      FunctionName: !Sub "${ProjectName}-${EnvironmentName}-custom-emails"
       Handler: index.handler
       MemorySize: 128
       Role: !GetAtt CognitoAuthLambdasRole.Arn
@@ -339,7 +339,7 @@ Resources:
         ZipFile: |
           exports.handler = async (event) => {
             const code = event.request.codeParameter;
-            const url = process.env.ProjectURL;
+            const url = process.EnvironmentName.ProjectURL;
             if (event.triggerSource === "CustomMessage_ForgotPassword") {
               let message = `<p>Dear Odamex user:</p> 
                              <p>Your password reset code is ${code}</p>
@@ -354,7 +354,7 @@ Resources:
     Type: "AWS::Lambda::Function"
     Condition: CreateSecurityScanResources
     Properties:
-      FunctionName: !Sub "${Env}-verify-auth-challenge"
+      FunctionName: !Sub "${ProjectName}-${EnvironmentName}-verify-auth-challenge"
       Handler: index.handler
       MemorySize: 128
       Role: !GetAtt CognitoAuthLambdasRole.Arn
@@ -378,7 +378,7 @@ Resources:
   UserPool:
     Type: "AWS::Cognito::UserPool"
     Properties:
-      UserPoolName: !Sub "${Env}-user-pool"
+      UserPoolName: !Sub "${ProjectName}-${EnvironmentName}-user-pool"
       AccountRecoverySetting:
         RecoveryMechanisms:
           - Name: verified_email
@@ -447,7 +447,7 @@ Resources:
       SmsAuthenticationMessage: "Your FPAR authentication code is {####}"
       SmsVerificationMessage: "Your FPAR verification code is {####}"
       SmsConfiguration:
-        ExternalId: !Sub "${Env}-external"
+        ExternalId: !Sub "${ProjectName}-${EnvironmentName}-external"
         SnsCallerArn: !GetAtt SNSRole.Arn
       Schema:
         - Name: name
@@ -497,7 +497,7 @@ Resources:
   UserPoolClient:
     Type: "AWS::Cognito::UserPoolClient"
     Properties:
-      ClientName: !Sub "${Env}-client"
+      ClientName: !Sub "${ProjectName}-${EnvironmentName}-client"
       GenerateSecret: false
       UserPoolId: !Ref UserPool
       AuthSessionValidity: 6
@@ -505,7 +505,7 @@ Resources:
   IdentityPool:
     Type: "AWS::Cognito::IdentityPool"
     Properties:
-      IdentityPoolName: !Sub "${Env}Identity"
+      IdentityPoolName: !Sub "${EnvironmentName}Identity"
       AllowUnauthenticatedIdentities: true
       CognitoIdentityProviders:
         - ClientId: !Ref UserPoolClient

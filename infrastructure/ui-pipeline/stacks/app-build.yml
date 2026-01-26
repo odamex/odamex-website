@@ -31,7 +31,7 @@ Resources:
   CodeBuildServiceRole:
     Type: "AWS::IAM::Role"
     Properties:
-      RoleName: !Sub MathRole-${ProjectName}-CodeBuildServiceRole-UI-${EnvironmentName}
+      RoleName: !Sub ${ProjectName}-${EnvironmentName}-${ProjectName}-CodeBuildServiceRole-UI-${EnvironmentName}
       AssumeRolePolicyDocument:
         Version: 2012-10-17
         Statement:
@@ -40,7 +40,7 @@ Resources:
               Service: codebuild.amazonaws.com
             Action: "sts:AssumeRole"
       Policies:
-        - PolicyName: !Sub MathPolicy-${ProjectName}-CodeBuildServiceRole-UI-${EnvironmentName}
+        - PolicyName: !Sub ${ProjectName}-${EnvironmentName}-${ProjectName}-CodeBuildServiceRole-UI-${EnvironmentName}
           PolicyDocument:
             Version: 2012-10-17
             Statement:

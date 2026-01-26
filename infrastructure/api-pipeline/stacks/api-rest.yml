@@ -1,7 +1,7 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: The resources used to create the WebApp environment.
+Description: The resources used to create the API
 Parameters:
-  Env:
+  EnvironmentName:
     AllowedValues:
       - 'local'
       - 'dev'
@@ -36,15 +36,18 @@ Parameters:
   ProjectURL:
     Type: String
     Default: 'odamex.net'
+  HostedZoneId:
+    Description: Route 53 hosted zone ID for API custom domain
+    Type: String
   WAFArn:
     Type: String
 
 Conditions:
   IsStaging: !Equals
-    - !Ref Env
+    - !Ref EnvironmentName
     - stg
   IsProd: !Equals
-    - !Ref Env
+    - !Ref EnvironmentName
     - prod
   IsNotProd: !Not
     - !Condition IsProd
@@ -69,10 +72,9 @@ Resources:
   LambdaForProxyRestAPIExecRole:
     Type: 'AWS::IAM::Role'
     Properties:
-      RoleName: !Sub MathRole-LambdaForProxyRestAPIExecRole-${Env}
-      PermissionsBoundary: !Sub arn:aws:iam::${AWS::AccountId}:policy/Math-Boundary-Policy
+      RoleName: !Sub ${ProjectName}-${EnvironmentName}-LambdaForProxyRestAPIExecRole
       Policies:
-        - PolicyName: !Sub 'MathPolicy-LambdaForProxyRestAPIExecRole-${Env}'
+        - PolicyName: !Sub '${ProjectName}-${EnvironmentName}-LambdaForProxyRestAPIExecPolicy'
           PolicyDocument:
             Version: 2012-10-17
             Statement:
@@ -91,43 +93,14 @@ Resources:
                 Resource: !Ref UserPoolArn
               - Effect: Allow
                 Action:
-                  - lambda:InvokeFunction
-                Resource:
-                  - !Sub arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:${Env}-data-quality-checks
-                  - !Sub arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:${Env}-dashboard-data
-              - Effect: Allow
-                Action:
                   - logs:CreateLogGroup
                   - logs:CreateLogStream
                   - logs:PutLogEvents
                 Resource: '*'
               - Effect: Allow
                 Action:
-                  - quicksight:ListDashboards
-                Resource: !Sub arn:aws:quicksight:${AWS::Region}:${AWS::AccountId}:dashboard/*
-              - Effect: Allow
-                Action:
-                  - quicksight:CreateGroupMembership
-                  - quicksight:DescribeUser
-                  - quicksight:GetAuthCode
-                  - quicksight:GenerateEmbedUrlForRegisteredUser
-                  - quicksight:RegisterUser
-                Resource: '*'
-              - Effect: Allow
-                Action:
                   - rds-data:*
                 Resource: !Ref DBClusterArn
-              - Effect: Allow
-                Action:
-                  - s3:PutObject
-                  - s3:GetObject
-                Resource:
-                  - !Sub
-                    - arn:aws:s3:::${bucketName}/*
-                    - bucketName: !Ref S3UserUploadName
-                  - !Sub
-                    - arn:aws:s3:::${Env}-${ProjectName}-cldb-noa-uploads/*
-                    - bucketName: !Ref S3UserUploadName
               - Effect: Allow
                 Action:
                   - secretsmanager:GetSecretValue
@@ -142,9 +115,7 @@ Resources:
               - Effect: Allow
                 Action:
                   - ssm:GetParameter
-                Resource: !Sub
-                  - arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter${parameterName}
-                  - parameterName: !Ref GoogleMapsApiKeyParameterName
+                Resource: '*'
 
       AssumeRolePolicyDocument:
         Version: 2012-10-17
@@ -155,21 +126,20 @@ Resources:
               Service: lambda.amazonaws.com
             Action: 'sts:AssumeRole'
 
-  # API App proxy
   APIProxy:
     Type: 'AWS::ApiGateway::RestApi'
     Properties:
-      Name: !Join ['-', [!Ref Env, 'rest-proxy']]
+      Name: !Join ['-', [!Ref EnvironmentName, 'rest-proxy']]
   APIProxyAuthorizer:
     Type: AWS::ApiGateway::Authorizer
     Properties:
       ProviderARNs:
         - !Ref UserPoolArn
       IdentitySource: method.request.header.Authorization
-      Name: !Join ['-', [!Ref Env, 'cognito-authorizer']]
+      Name: !Join ['-', [!Ref EnvironmentName, 'cognito-authorizer']]
       RestApiId: !Ref APIProxy
       Type: COGNITO_USER_POOLS
-  # proxy
+ 
   APIProxyResource:
     Type: 'AWS::ApiGateway::Resource'
     Properties:
@@ -227,30 +197,27 @@ Resources:
   LambdaForProxyRestAPI:
     Type: 'AWS::Lambda::Function'
     Properties:
-      FunctionName: !Sub '${Env}-rest-api'
+      FunctionName: !Sub '${ProjectName}-${EnvironmentName}-rest-api'
       Handler: built/index.handler
       MemorySize: 384
       Role: !GetAtt LambdaForProxyRestAPIExecRole.Arn
-      Runtime: nodejs20.x
+      Runtime: nodejs22.x
       Timeout: 600
       LoggingConfig:
-        ApplicationLogLevel: !FindInMap [LogLevel, !Ref Env, level]
+        ApplicationLogLevel: !FindInMap [LogLevel, !Ref EnvironmentName, level]
         LogFormat: JSON
-        SystemLogLevel: !FindInMap [LogLevel, !Ref Env, level]
+        SystemLogLevel: !FindInMap [LogLevel, !Ref EnvironmentName, level]
       VpcConfig:
         SecurityGroupIds:
           - !Ref DatabaseSecurityGroup
         SubnetIds: !Ref DatabaseSubnetList
       Environment:
         Variables:
-          ENV: !Ref Env
+          EnvironmentName: !Ref EnvironmentName
           REGION: !Ref 'AWS::Region'
           AUTH_USERPOOLID: !Ref UserPoolId
-          S3_USER_UPLOAD: !Ref S3UserUploadName
-          S3_NOA_UPLOAD: !Sub '${Env}-${ProjectName}-cldb-noa-uploads'
           DB_AdminSecret: !Ref DBAdminSecret
           DB_ClusterArn: !Ref DBClusterArn
-          GOOGLE_MAPS_API_KEY_PARAMETER_NAME: !Ref GoogleMapsApiKeyParameterName
           ProjectURL: !Ref ProjectURL
           ACCOUNT_ID: !Sub ${AWS::AccountId}
       Code:
@@ -266,7 +233,7 @@ Resources:
       FunctionName: !Ref LambdaForProxyRestAPI
       Principal: apigateway.amazonaws.com
 
-  APIProxyDeploymentv1:
+  APIProxyDeployment:
     Type: 'AWS::ApiGateway::Deployment'
     DependsOn:
       - APIProxyResourceMethodMock
@@ -276,10 +243,44 @@ Resources:
   APIProxyStage:
     Type: 'AWS::ApiGateway::Stage'
     Properties:
-      StageName: !Ref Env
-      Description: !Sub '${Env}-stage'
+      StageName: !Sub '${ProjectName}-${EnvironmentName}'
+      Description: !Sub '${ProjectName}-${EnvironmentName}-stage'
       RestApiId: !Ref APIProxy
-      DeploymentId: !Ref APIProxyDeploymentv1
+      DeploymentId: !Ref APIProxyDeployment
+  APICertificate:
+    Type: AWS::CertificateManager::Certificate
+    Properties:
+      DomainName: !Sub 'api.${ProjectURL}'
+      DomainValidationOptions:
+        - DomainName: !Sub 'api.${ProjectURL}'
+          HostedZoneId: !Ref HostedZoneId
+      ValidationMethod: DNS
+  APICustomDomain:
+    Type: AWS::ApiGateway::DomainName
+    Properties:
+      DomainName: !Sub 'api.${ProjectURL}'
+      EndpointConfiguration:
+        Types:
+          - REGIONAL
+      RegionalCertificateArn: !Ref APICertificate
+      SecurityPolicy: TLS_1_2
+  APIDomainBasePathMapping:
+    Type: AWS::ApiGateway::BasePathMapping
+    DependsOn:
+      - APIProxyStage
+    Properties:
+      DomainName: !Ref APICustomDomain
+      RestApiId: !Ref APIProxy
+      Stage: !Ref APIProxyStage
+  APIDomainRecord:
+    Type: AWS::Route53::RecordSet
+    Properties:
+      AliasTarget:
+        DNSName: !GetAtt APICustomDomain.RegionalDomainName
+        HostedZoneId: !GetAtt APICustomDomain.RegionalHostedZoneId
+      HostedZoneId: !Ref HostedZoneId
+      Name: !Sub 'api.${ProjectURL}'
+      Type: A
 
   # WebACL association for Proxy API
   APIProxyWebACL:
@@ -288,14 +289,14 @@ Resources:
       - APIProxyStage
     Properties:
       ResourceArn: !Sub
-        - arn:aws:apigateway:${AWS::Region}::/restapis/${restApiId}/stages/${Env}
+        - arn:aws:apigateway:${AWS::Region}::/restapis/${restApiId}/stages/${EnvironmentName}
         - restApiId: !Ref APIProxy
       WebACLArn: !Ref WAFArn
 
   APIEmailSESConfigurationSet:
     Type: AWS::SES::ConfigurationSet
     Properties:
-      Name: !Sub ${Env}-ses-configuration-set
+      Name: !Sub ${ProjectName}-${EnvironmentName}-ses-configuration-set
       DeliveryOptions:
         TlsPolicy: REQUIRE
       SendingOptions:
