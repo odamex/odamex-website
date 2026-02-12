@@ -1,5 +1,5 @@
 @if (images) {
-	<ngb-carousel #carousel class="shadow-sm">
+	<ngb-carousel #carousel class="shadow-sm" [interval]="5000" [pauseOnHover]="true" [wrap]="true" [keyboard]="true" [pauseOnFocus]="true">
         @for (item of carouselItems; track $index) {
             <ng-template ngbSlide id="slide-{{$index}}">
                 <div class="img-wrapper">
