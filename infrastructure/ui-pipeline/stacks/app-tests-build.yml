@@ -16,6 +16,9 @@ Resources:
     Type: "AWS::IAM::Role"
     Properties:
       RoleName: !Sub ${ProjectName}-${EnvironmentName}-${ProjectName}-CodeTestBuildServiceRole-UI-${EnvironmentName}
+      Tags:
+        - Key: Project
+          Value: Odamex
       AssumeRolePolicyDocument:
         Version: 2012-10-17
         Statement:
@@ -49,6 +52,9 @@ Resources:
   CodeTestBuildProject:
     Type: "AWS::CodeBuild::Project"
     Properties:
+      Tags:
+        - Key: Project
+          Value: Odamex
       Artifacts:
         Type: CODEPIPELINE
       Source:

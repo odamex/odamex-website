@@ -21,6 +21,9 @@ Resources:
   Certificate:
     Type: AWS::CertificateManager::Certificate
     Properties:
+      Tags:
+        - Key: Project
+          Value: Odamex
       DomainName: !Ref DomainName
       DomainValidationOptions:
         - DomainName: !Ref DomainName
@@ -35,6 +38,9 @@ Resources:
     Type: AWS::S3::Bucket
     Properties:
       BucketName: !Sub "${ProjectName}-${EnvironmentName}-${AWS::AccountId}"
+      Tags:
+        - Key: Project
+          Value: Odamex
       BucketEncryption:
         ServerSideEncryptionConfiguration:
           - ServerSideEncryptionByDefault:
@@ -92,6 +98,9 @@ Resources:
     Type: AWS::S3::Bucket
     Properties:
       BucketName: !Sub "${ProjectName}-${EnvironmentName}-cloudfront-distribution-logs-${AWS::AccountId}"
+      Tags:
+        - Key: Project
+          Value: Odamex
       AccessControl: LogDeliveryWrite
       OwnershipControls:
         Rules:
@@ -220,6 +229,9 @@ Resources:
     DependsOn:
       - CloudFrontDistributionLogBucket
     Properties:
+      Tags:
+        - Key: Project
+          Value: Odamex
       DistributionConfig:
         Aliases: !Split [",", !Sub "${DomainName}"]
         DefaultCacheBehavior:

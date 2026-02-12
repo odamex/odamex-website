@@ -91,61 +91,15 @@ Conditions:
   SetupVeracode: !Equals [!Ref UseVeracode, "Yes"]
 
 Resources:
-  # Notification topic
-  MySNSTopic:
-    Type: AWS::SNS::Topic
-    Condition: DoEmailAlerts
-    Properties:
-      Subscription:
-        - Endpoint: !Ref AlertsEmailAddress
-          Protocol: "email"
-      TopicName: !Sub "${ProjectName}-${EnvironmentName}-UI-email-alerts"
-
-  # Role used to give CodePipeline to release a build.
-  CodePipelineServiceRole:
-    Type: AWS::IAM::Role
-    Properties:
-      RoleName: !Sub ${ProjectName}-${EnvironmentName}-CodePipelineServiceRole
-      AssumeRolePolicyDocument:
-        Version: 2012-10-17
-        Statement:
-          - Effect: Allow
-            Principal:
-              Service: codepipeline.amazonaws.com
-            Action: sts:AssumeRole
-      Policies:
-        - PolicyName: !Sub ${ProjectName}-${EnvironmentName}-CodePipelineServicePolicy
-          PolicyDocument:
-            Version: 2012-10-17
-            Statement:
-              # Allow codepipeline to put artifacts in the S3 bucket
-              # as well as get artifacts back out of it.
-              - Resource: "*" #  - !Sub arn:aws:s3:::${ArtifactBucket}/*
-                Effect: Allow
-                Action:
-                  - s3:*
-                  - ecr:*
-                  - ssm:*
-                  - codebuild:StartBuild
-                  - codebuild:BatchGetBuilds
-                  - codestar-connections:*
-                  - iam:PassRole
-                  - cloudformation:CreateChangeSet
-                  - cloudformation:CreateStack
-                  - cloudformation:CreateUploadBucket
-                  - cloudformation:DeleteStack
-                  - cloudformation:Describe*
-                  - cloudformation:List*
-                  - cloudformation:UpdateStack
-                  - cloudformation:ValidateTemplate
-                  - cloudformation:ExecuteChangeSet
-
   # CloudFormation deployment role. This role is passed by CodeBuild to
   # CloudFormation to use when setting up the application resources
   CloudFormationDeployRole:
     Type: AWS::IAM::Role
     Properties:
       RoleName: !Sub ${ProjectName}-${EnvironmentName}-CloudFormationDeployRole
+      Tags:
+        - Key: Project
+          Value: Odamex
       AssumeRolePolicyDocument:
         Version: 2012-10-17
         Statement:
@@ -184,11 +138,69 @@ Resources:
                   - "wafv2:*"
                 Resource: "*"
 
+  # Notification topic
+  MySNSTopic:
+    Type: AWS::SNS::Topic
+    Condition: DoEmailAlerts
+    Properties:
+      Tags:
+        - Key: Project
+          Value: Odamex
+      Subscription:
+        - Endpoint: !Ref AlertsEmailAddress
+          Protocol: "email"
+      TopicName: !Sub "${ProjectName}-${EnvironmentName}-UI-email-alerts"
+
+  # Role used to give CodePipeline to release a build.
+  CodePipelineServiceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub ${ProjectName}-${EnvironmentName}-CodePipelineServiceRole
+      Tags:
+        - Key: Project
+          Value: Odamex
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: codepipeline.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: !Sub ${ProjectName}-${EnvironmentName}-CodePipelineServicePolicy
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              # Allow codepipeline to put artifacts in the S3 bucket
+              # as well as get artifacts back out of it.
+              - Resource: "*" #  - !Sub arn:aws:s3:::${ArtifactBucket}/*
+                Effect: Allow
+                Action:
+                  - s3:*
+                  - ecr:*
+                  - ssm:*
+                  - codebuild:StartBuild
+                  - codebuild:BatchGetBuilds
+                  - codestar-connections:*
+                  - iam:PassRole
+                  - cloudformation:CreateChangeSet
+                  - cloudformation:CreateStack
+                  - cloudformation:CreateUploadBucket
+                  - cloudformation:DeleteStack
+                  - cloudformation:Describe*
+                  - cloudformation:List*
+                  - cloudformation:UpdateStack
+                  - cloudformation:ValidateTemplate
+                  - cloudformation:ExecuteChangeSet
+
   # While the build is in progress we need a place to store artifacts
   ArtifactBucket:
     Type: AWS::S3::Bucket
     Properties:
       BucketName: !Sub ${ProjectName}-${EnvironmentName}-artifacts
+      Tags:
+        - Key: Project
+          Value: Odamex
       BucketEncryption:
         ServerSideEncryptionConfiguration:
           - ServerSideEncryptionByDefault:
@@ -236,6 +248,8 @@ Resources:
       Tags:
         - Key: EnvironmentName
           Value: !Ref EnvironmentName
+        - Key: Project
+          Value: Odamex
       RoleArn: !GetAtt CodePipelineServiceRole.Arn
       ArtifactStore:
         Type: S3
