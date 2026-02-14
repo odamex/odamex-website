@@ -173,7 +173,7 @@ Resources:
           ContentTypeOptions:
             Override: true
           ContentSecurityPolicy:
-            ContentSecurityPolicy: !Sub default-src 'self' 'unsafe-inline' 'unsafe-eval' data: https:; connect-src 'self' api.${DomainName} cognito-idp.${AWS::Region}.amazonaws.com https:;
+            ContentSecurityPolicy: !Sub "default-src 'self' 'unsafe-inline' 'unsafe-eval' data: https:; connect-src 'self' api.${DomainName} cognito-idp.${AWS::Region}.amazonaws.com https:;"
             Override: true
           FrameOptions:
             FrameOption: SAMEORIGIN
