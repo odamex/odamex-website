@@ -303,12 +303,13 @@ Resources:
                 ActionMode: CREATE_UPDATE
                 RoleArn: !GetAtt CloudFormationDeployRole.Arn
                 StackName: !Sub "${ProjectName}-${ServiceType}-${EnvironmentName}-app-build-tests"
-                TemplatePath: SourceArtifact::infrastructure/stacks/app-tests-build.yml
+                TemplatePath: SourceArtifact::infrastructure/ui-pipeline/stacks/app-tests-build.yml
                 Capabilities: CAPABILITY_NAMED_IAM
                 ParameterOverrides: !Sub |
                   { 
                   	"EnvironmentName": "${EnvironmentName}",
-                    "ProjectName": "${ProjectName}"
+                    "ProjectName": "${ProjectName}",
+                    "ServiceType": "${ServiceType}"
                   }
               InputArtifacts:
                 - Name: SourceArtifact
@@ -342,7 +343,7 @@ Resources:
                 ActionMode: CREATE_UPDATE
                 RoleArn: !GetAtt CloudFormationDeployRole.Arn
                 StackName: !Sub "${ProjectName}-${ServiceType}-${EnvironmentName}-distribution"
-                TemplatePath: SourceArtifact::infrastructure/stacks/distribution.yml
+                TemplatePath: SourceArtifact::infrastructure/ui-pipeline/stacks/distribution.yml
                 Capabilities: CAPABILITY_NAMED_IAM
                 ParameterOverrides: !Sub |
                   { 
@@ -350,6 +351,7 @@ Resources:
                   	"DomainName": "${DomainName}",
                     "WAFArn": "${WAFArn}",
                     "ProjectName": "${ProjectName}",
+                    "ServiceType": "${ServiceType}",
                     "HostedZoneId": "${HostedZoneId}",
                     "SecurityHeadersPolicyId": "${SecurityHeadersPolicyId}"
                   }
@@ -369,7 +371,7 @@ Resources:
                 ActionMode: CREATE_UPDATE
                 RoleArn: !GetAtt CloudFormationDeployRole.Arn
                 StackName: !Sub "${ProjectName}-${ServiceType}-${EnvironmentName}-app-build"
-                TemplatePath: SourceArtifact::infrastructure/stacks/app-build.yml
+                TemplatePath: SourceArtifact::infrastructure/ui-pipeline/stacks/app-build.yml
                 Capabilities: CAPABILITY_NAMED_IAM
                 ParameterOverrides: !Sub |
                   { 
@@ -378,6 +380,7 @@ Resources:
                   	"CloudFrontDistribution": "#{DistributionVars.CloudFrontDistribution}",
                   	"DomainName": "${DomainName}",
                     "ProjectName": "${ProjectName}",
+                    "ServiceType": "${ServiceType}",
                     "VPC": "${VPCID}",
                     "SecurityGroup": "${VPCDefaultSecurityGroup}"
                   }
