@@ -25,7 +25,7 @@ if [ $ENV = 'stg' ]; then
   GAME_SITE_URL="dev.odamex.co"
 fi
 
-if [ $ENV = 'dev']; then
+if [ $ENV = 'dev' ]; then
   GAME_SITE_URL="dev.odamex.co"
 fi
 
