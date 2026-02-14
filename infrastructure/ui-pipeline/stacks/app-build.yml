@@ -95,7 +95,7 @@ Resources:
                 - cat src/_config.ts
                 - $BUILD_CMD
                 # deploy app to s3
-                - aws s3 sync ./dist/odamex "s3://$WEBBUCKET/"
+                - aws s3 sync ./dist/odamex/browser "s3://$WEBBUCKET/"
                 # --> DISTRIBUTION
                 # clear cloudfront distribution
                 - aws cloudfront create-invalidation --distribution-id $CLOUDFRONT_DISTRIBUTION --paths "/*"
