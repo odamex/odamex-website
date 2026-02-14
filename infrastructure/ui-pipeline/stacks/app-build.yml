@@ -8,6 +8,8 @@ Parameters:
     Type: String
   ProjectName:
     Type: String
+  ServiceType:
+    Type: String
   DomainName:
     Type: String
   CloudFrontDistribution:
@@ -31,10 +33,10 @@ Resources:
   CodeBuildServiceRole:
     Type: "AWS::IAM::Role"
     Properties:
-      RoleName: !Sub ${ProjectName}-${EnvironmentName}-${ProjectName}-CodeBuildServiceRole-UI-${EnvironmentName}
+      RoleName: !Sub ${ProjectName}-${ServiceType}-${EnvironmentName}-CodeBuildServiceRole
       Tags:
-        - Key: Project
-          Value: Odamex
+        - Key: platform
+          Value: odamex
       AssumeRolePolicyDocument:
         Version: 2012-10-17
         Statement:
@@ -43,7 +45,7 @@ Resources:
               Service: codebuild.amazonaws.com
             Action: "sts:AssumeRole"
       Policies:
-        - PolicyName: !Sub ${ProjectName}-${EnvironmentName}-${ProjectName}-CodeBuildServiceRole-UI-${EnvironmentName}
+        - PolicyName: !Sub ${ProjectName}-${ServiceType}-${EnvironmentName}-CodeBuildServicePolicy
           PolicyDocument:
             Version: 2012-10-17
             Statement:
@@ -70,8 +72,8 @@ Resources:
     Type: "AWS::CodeBuild::Project"
     Properties:
       Tags:
-        - Key: Project
-          Value: Odamex
+        - Key: platform
+          Value: odamex
       Artifacts:
         Type: CODEPIPELINE
       Source:
@@ -113,7 +115,7 @@ Resources:
           - Name: BUILD_CMD
             Value: !Sub "npm run build:${EnvironmentName}"
 
-      Name: !Sub ${ProjectName}-${EnvironmentName}-ui-CodeBuildProject
+      Name: !Sub ${ProjectName}-${ServiceType}-${EnvironmentName}-ui-CodeBuildProject
       ServiceRole: !Ref CodeBuildServiceRole
 
 Outputs:

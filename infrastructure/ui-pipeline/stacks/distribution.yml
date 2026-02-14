@@ -8,6 +8,8 @@ Parameters:
     Type: String
   ProjectName:
     Type: String
+  ServiceType:
+    Type: String
   WAFArn:
     Type: String
   HostedZoneId:
@@ -22,8 +24,8 @@ Resources:
     Type: AWS::CertificateManager::Certificate
     Properties:
       Tags:
-        - Key: Project
-          Value: Odamex
+        - Key: platform
+          Value: odamex
       DomainName: !Ref DomainName
       DomainValidationOptions:
         - DomainName: !Ref DomainName
@@ -37,10 +39,10 @@ Resources:
   S3WebApp:
     Type: AWS::S3::Bucket
     Properties:
-      BucketName: !Sub "${ProjectName}-${EnvironmentName}-${AWS::AccountId}"
+      BucketName: !Sub "${ProjectName}-${ServiceType}-${EnvironmentName}-ui"
       Tags:
-        - Key: Project
-          Value: Odamex
+        - Key: platform
+          Value: odamex
       BucketEncryption:
         ServerSideEncryptionConfiguration:
           - ServerSideEncryptionByDefault:
@@ -97,10 +99,10 @@ Resources:
   CloudFrontDistributionLogBucket:
     Type: AWS::S3::Bucket
     Properties:
-      BucketName: !Sub "${ProjectName}-${EnvironmentName}-cloudfront-distribution-logs-${AWS::AccountId}"
+      BucketName: !Sub "${ProjectName}-${ServiceType}-${EnvironmentName}-cloudfront-distribution-logs"
       Tags:
-        - Key: Project
-          Value: Odamex
+        - Key: platform
+          Value: odamex
       AccessControl: LogDeliveryWrite
       OwnershipControls:
         Rules:
@@ -199,8 +201,8 @@ Resources:
     Type: AWS::CloudFront::OriginAccessControl
     Properties:
       OriginAccessControlConfig:
-        Description: !Sub "OAC for ${ProjectName}-${EnvironmentName}"
-        Name: !Sub "${ProjectName}-${EnvironmentName}-OAC"
+        Description: !Sub "OAC for ${ProjectName}-${ServiceType}-${EnvironmentName}"
+        Name: !Sub "${ProjectName}-${ServiceType}-${EnvironmentName}-OAC"
         OriginAccessControlOriginType: s3
         SigningBehavior: always
         SigningProtocol: sigv4
@@ -230,8 +232,8 @@ Resources:
       - CloudFrontDistributionLogBucket
     Properties:
       Tags:
-        - Key: Project
-          Value: Odamex
+        - Key: platform
+          Value: odamex
       DistributionConfig:
         Aliases: !Split [",", !Sub "${DomainName}"]
         DefaultCacheBehavior:

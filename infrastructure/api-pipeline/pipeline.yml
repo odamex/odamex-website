@@ -14,10 +14,10 @@ Metadata:
       - Label:
           default: Source Repository Information
         Parameters:
-          - GitHubOwner
+          - GitOrg
           - GitHubTokenParameterName
           - GoogleMapsApiKeyParameterName
-          - AppRepo
+          - GitRepo
           - AppBranch
       - Label:
           default: Network Information
@@ -36,7 +36,7 @@ Parameters:
       - 'dev'
       - 'qa'
       - 'main'
-  AppRepo:
+  GitRepo:
     Description: GitHub repository name
     Type: String
     Default: 'odamex'
@@ -53,7 +53,7 @@ Parameters:
       - 'qa'
       - 'stg'
       - 'prod'
-  GitHubOwner:
+  GitOrg:
     Description: GitHub username owning the repo
     Type: String
     Default: odamex
@@ -267,9 +267,9 @@ Resources:
                 Provider: GitHub
                 Version: '1'
               Configuration:
-                Owner: !Ref GitHubOwner
+                Owner: !Ref GitOrg
                 OAuthToken: !Sub '{{resolve:ssm:${GitHubTokenParameterName}}}'
-                Repo: !Ref AppRepo
+                Repo: !Ref GitRepo
                 Branch: !Ref AppBranch
                 PollForSourceChanges: false
               OutputArtifacts:

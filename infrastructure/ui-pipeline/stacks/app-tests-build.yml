@@ -6,6 +6,8 @@ Parameters:
     Description: The name for the environment that this cloudformation will be part of.
   ProjectName:
     Type: String
+  ServiceType:
+    Type: String
 
 Conditions:
   TestStage: !Equals [!Ref EnvironmentName, test]
@@ -15,10 +17,10 @@ Resources:
   CodeTestBuildServiceRole:
     Type: "AWS::IAM::Role"
     Properties:
-      RoleName: !Sub ${ProjectName}-${EnvironmentName}-${ProjectName}-CodeTestBuildServiceRole-UI-${EnvironmentName}
+      RoleName: !Sub ${ProjectName}-${ServiceType}-${EnvironmentName}-CodeTestBuildServiceRole
       Tags:
-        - Key: Project
-          Value: Odamex
+        - Key: platform
+          Value: odamex
       AssumeRolePolicyDocument:
         Version: 2012-10-17
         Statement:
@@ -27,7 +29,7 @@ Resources:
               Service: codebuild.amazonaws.com
             Action: "sts:AssumeRole"
       Policies:
-        - PolicyName: !Sub ${ProjectName}-${EnvironmentName}-${ProjectName}-CodeTestBuildServiceRole-UI-${EnvironmentName}
+        - PolicyName: !Sub ${ProjectName}-${ServiceType}-${EnvironmentName}-CodeTestBuildServicePolicy
           PolicyDocument:
             Version: 2012-10-17
             Statement:
@@ -53,8 +55,8 @@ Resources:
     Type: "AWS::CodeBuild::Project"
     Properties:
       Tags:
-        - Key: Project
-          Value: Odamex
+        - Key: platform
+          Value: odamex
       Artifacts:
         Type: CODEPIPELINE
       Source:
@@ -69,8 +71,8 @@ Resources:
               commands:
                 - cd $CODEBUILD_SRC_DIR/
                 - npm i
-                - chmod +x config-generator.sh
-                - ./config-generator.sh ${EnvironmentName} ${AWS::Region} > src/_config.ts
+                # - chmod +x config-generator.sh
+                # - ./config-generator.sh ${ProjectName} ${ServiceType} ${EnvironmentName} ${AWS::Region} > src/_config.ts
                 # - npm run prebuild
                 # - npm run test-coverage
       Environment:
@@ -80,9 +82,7 @@ Resources:
         EnvironmentVariables:
           - Name: EnvironmentName
             Value: !Ref EnvironmentName
-          - Name: GITHUB_TOKEN
-            Value: !Sub "{{resolve:ssm:GitHubToken}}"
-      Name: !Sub ${ProjectName}-${EnvironmentName}-ui-CodeTestBuildProject
+      Name: !Sub ${ProjectName}-${ServiceType}-${EnvironmentName}-CodeTestBuildProject
       ServiceRole: !Ref CodeTestBuildServiceRole
     #   VpcConfig:
     #     VpcId: !Ref VPC
