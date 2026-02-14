@@ -89,7 +89,7 @@ Parameters:
   SecurityHeadersPolicyId:
     Description: The ID of the AWS managed response header policy "SecurityHeadersPolicy"
     Type: String
-    Default: "67f7725c-6f97-4210-82d7-5512b31e9d03"
+    Default: "eaab4381-ed33-4a86-88ca-d9558dc6cd63"
   VPCID:
     Description: Existing VPC ID
     Type: AWS::EC2::VPC::Id

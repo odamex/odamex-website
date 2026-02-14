@@ -168,16 +168,12 @@ Resources:
             - Header: Server
               Override: true
               Value: ""
-
-            - Header: Reporting-Endpoints
-              Override: true
-              Value: !Sub 'csp-endpoint="https://api.${DomainName}/v1/security/csp-report"'
         Name: !Sub ${ProjectName}_${EnvironmentName}_Security_Response_Headers_Policy
         SecurityHeadersConfig:
           ContentTypeOptions:
             Override: true
           ContentSecurityPolicy:
-            ContentSecurityPolicy: !Sub default-src 'self'; script-src 'self'; style-src 'self'; style-src-elem 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' api.${DomainName} cognito-idp.${AWS::Region}.amazonaws.com; frame-src 'self' ${AWS::Region}.quicksight.aws.amazon.com; object-src 'none'; frame-ancestors 'none';  form-action 'self'; base-uri 'self'; report-uri https://api.${DomainName}/v1/security/csp-report-uri; report-to csp-endpoint
+            ContentSecurityPolicy: !Sub default-src 'self' 'unsafe-inline' 'unsafe-eval' data: https:; connect-src 'self' api.${DomainName} cognito-idp.${AWS::Region}.amazonaws.com https:;
             Override: true
           FrameOptions:
             FrameOption: SAMEORIGIN
