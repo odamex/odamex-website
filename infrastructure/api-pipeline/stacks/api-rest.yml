@@ -73,6 +73,9 @@ Resources:
     Type: 'AWS::IAM::Role'
     Properties:
       RoleName: !Sub ${ProjectName}-${EnvironmentName}-LambdaForProxyRestAPIExecRole
+      Tags:
+        - Key: platform
+          Value: odamex
       Policies:
         - PolicyName: !Sub '${ProjectName}-${EnvironmentName}-LambdaForProxyRestAPIExecPolicy'
           PolicyDocument:
@@ -130,6 +133,8 @@ Resources:
     Type: 'AWS::ApiGateway::RestApi'
     Properties:
       Name: !Join ['-', [!Ref EnvironmentName, 'rest-proxy']]
+      Tags:
+        platform: odamex
   APIProxyAuthorizer:
     Type: AWS::ApiGateway::Authorizer
     Properties:
@@ -198,6 +203,9 @@ Resources:
     Type: 'AWS::Lambda::Function'
     Properties:
       FunctionName: !Sub '${ProjectName}-${EnvironmentName}-rest-api'
+      Tags:
+        - Key: platform
+          Value: odamex
       Handler: built/index.handler
       MemorySize: 384
       Role: !GetAtt LambdaForProxyRestAPIExecRole.Arn
@@ -245,11 +253,16 @@ Resources:
     Properties:
       StageName: !Sub '${ProjectName}-${EnvironmentName}'
       Description: !Sub '${ProjectName}-${EnvironmentName}-stage'
+      Tags:
+        platform: odamex
       RestApiId: !Ref APIProxy
       DeploymentId: !Ref APIProxyDeployment
   APICertificate:
     Type: AWS::CertificateManager::Certificate
     Properties:
+      Tags:
+        - Key: platform
+          Value: odamex
       DomainName: !Sub 'api.${ProjectURL}'
       DomainValidationOptions:
         - DomainName: !Sub 'api.${ProjectURL}'
@@ -259,6 +272,9 @@ Resources:
     Type: AWS::ApiGateway::DomainName
     Properties:
       DomainName: !Sub 'api.${ProjectURL}'
+      Tags:
+        - Key: platform
+          Value: odamex
       EndpointConfiguration:
         Types:
           - REGIONAL
@@ -297,6 +313,9 @@ Resources:
     Type: AWS::SES::ConfigurationSet
     Properties:
       Name: !Sub ${ProjectName}-${EnvironmentName}-ses-configuration-set
+      Tags:
+        - Key: platform
+          Value: odamex
       DeliveryOptions:
         TlsPolicy: REQUIRE
       SendingOptions:

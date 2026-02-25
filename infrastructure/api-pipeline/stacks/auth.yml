@@ -66,6 +66,9 @@ Resources:
     Type: "AWS::IAM::Role"
     Properties:
       RoleName: !Sub ${ProjectName}-${EnvironmentName}-SNSRole
+      Tags:
+        - Key: platform
+          Value: odamex
       AssumeRolePolicyDocument:
         Version: 2012-10-17
         Statement:
@@ -92,6 +95,9 @@ Resources:
     Type: "AWS::IAM::Role"
     Properties:
       RoleName: !Sub ${ProjectName}-${EnvironmentName}-CognitoLambdasRole
+      Tags:
+        - Key: platform
+          Value: odamex
       AssumeRolePolicyDocument:
         Version: 2012-10-17
         Statement:
@@ -164,6 +170,9 @@ Resources:
     Type: "AWS::IAM::Role"
     Properties:
       RoleName: !Sub ${ProjectName}-${EnvironmentName}-CognitoUnAuthorizedRole
+      Tags:
+        - Key: platform
+          Value: odamex
       AssumeRolePolicyDocument:
         Version: 2012-10-17
         Statement:
@@ -192,6 +201,9 @@ Resources:
     Type: "AWS::IAM::Role"
     Properties:
       RoleName: !Sub ${ProjectName}-${EnvironmentName}-CognitoAuthorizedRole
+      Tags:
+        - Key: platform
+          Value: odamex
       AssumeRolePolicyDocument:
         Version: 2012-10-17
         Statement:
@@ -222,6 +234,9 @@ Resources:
     Condition: CreateSecurityScanResources
     Properties:
       FunctionName: !Sub "${ProjectName}-${EnvironmentName}-create-auth-challenge"
+      Tags:
+        - Key: platform
+          Value: odamex
       Handler: index.handler
       MemorySize: 128
       Role: !GetAtt CognitoAuthLambdasRole.Arn
@@ -246,6 +261,9 @@ Resources:
     Condition: CreateSecurityScanResources
     Properties:
       FunctionName: !Sub "${ProjectName}-${EnvironmentName}-define-auth-challenge"
+      Tags:
+        - Key: platform
+          Value: odamex
       Handler: index.handler
       MemorySize: 128
       Role: !GetAtt CognitoAuthLambdasRole.Arn
@@ -327,6 +345,9 @@ Resources:
     Type: "AWS::Lambda::Function"
     Properties:
       FunctionName: !Sub "${ProjectName}-${EnvironmentName}-custom-emails"
+      Tags:
+        - Key: platform
+          Value: odamex
       Handler: index.handler
       MemorySize: 128
       Role: !GetAtt CognitoAuthLambdasRole.Arn
@@ -355,6 +376,9 @@ Resources:
     Condition: CreateSecurityScanResources
     Properties:
       FunctionName: !Sub "${ProjectName}-${EnvironmentName}-verify-auth-challenge"
+      Tags:
+        - Key: platform
+          Value: odamex
       Handler: index.handler
       MemorySize: 128
       Role: !GetAtt CognitoAuthLambdasRole.Arn
@@ -379,6 +403,8 @@ Resources:
     Type: "AWS::Cognito::UserPool"
     Properties:
       UserPoolName: !Sub "${ProjectName}-${EnvironmentName}-user-pool"
+      UserPoolTags:
+        platform: odamex
       AccountRecoverySetting:
         RecoveryMechanisms:
           - Name: verified_email

@@ -1,0 +1,108 @@
+service: httpAllThroughProxy
+
+provider:
+    name: aws
+    runtime: nodejs12.x
+
+    stage: local
+    region: us-east-1
+
+Resources:
+    APIProxy:
+        Type: AWS::ApiGateway::RestApi
+        Properties:
+            Name: test-api-gateway
+            Description: 'The main entry point of test APIs'
+    APIProxyAuthorizer:
+        Type: AWS::ApiGateway::Authorizer
+        Properties:
+            ProviderARNs:
+                - !Ref arn:aws:cognito-idp:us-east-1:175255461604:userpool/us-east-1_sK8fyF5AW
+            IdentitySource: method.request.header.Authorization
+            Name: test-cognito-authorizer
+            RestApiId: !Ref APIProxy
+            Type: COGNITO_USER_POOLS
+    APIProxyResource:
+        Type: AWS::ApiGateway::Resource
+        Properties:
+            ParentId:
+                Fn::GetAtt:
+                    - APIProxy
+                    - RootResourceId
+            PathPart: '{proxy+}'
+            RestApiId:
+                Ref: APIProxy
+    APIProxyResourceMethodMock:
+        Type: 'AWS::ApiGateway::Method'
+        Properties:
+            AuthorizationType: None
+            HttpMethod: OPTIONS
+            RestApiId: !Ref APIProxy
+            ResourceId: !Ref APIProxyResource
+            MethodResponses:
+                - ResponseModels:
+                      application/json: Empty
+                  ResponseParameters:
+                      method.response.header.Access-Control-Allow-Origin: true
+                      method.response.header.Access-Control-Allow-Methods: true
+                      method.response.header.Access-Control-Allow-Headers: true
+                  StatusCode: 200
+            Integration:
+                Type: MOCK
+                IntegrationResponses:
+                    - ResponseParameters:
+                          method.response.header.Access-Control-Allow-Origin: "'*'"
+                          method.response.header.Access-Control-Allow-Methods: "'DELETE,GET,HEAD,OPTIONS,PATCH,POST,PUT'"
+                          method.response.header.Access-Control-Allow-Headers: "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token'"
+                      ResponseTemplates:
+                          application/json: ''
+                      StatusCode: 200
+                PassthroughBehavior: WHEN_NO_TEMPLATES
+                RequestTemplates:
+                    application/json: '{"statusCode": 200}'
+    APIProxyResourceMethodANY:
+        Type: 'AWS::ApiGateway::Method'
+        DependsOn:
+            - APIProxy
+            - LambdaForProxyRestAPI
+        Properties:
+            RestApiId: !Ref APIProxy
+            ResourceId: !Ref APIProxyResource
+            HttpMethod: ANY
+            AuthorizationType: COGNITO_USER_POOLS
+            AuthorizerId: !Ref APIProxyAuthorizer
+            Integration:
+                Type: AWS_PROXY
+                IntegrationHttpMethod: POST
+                Uri: !Sub
+                    - arn:aws:apigateway:us-east-1:lambda:path/2015-03-31/functions/arn:aws:iam::175255461604:role/MathRole-LambdaForProxyRestAPIExecRole-local/invocations
+                    - lambdaArn: arn:aws:iam::175255461604:role/MathRole-LambdaForProxyRestAPIExecRole-local
+
+    # Lambda for Proxy API
+    LambdaForProxyRestAPI:
+        Type: 'AWS::Lambda::Function'
+        Properties:
+            FunctionName: 'test-rest-api'
+            Handler: index.handler
+            MemorySize: 384
+            Role: arn:aws:iam::175255461604:role/MathRole-LambdaForProxyRestAPIExecRole-local
+            Runtime: nodejs12.x
+            Timeout: 20
+            Environment:
+                Variables:
+                    ENV: local
+                    REGION: us-east-1
+                    AUTH_USERPOOLID: us-east-1_sK8fyF5AW
+                    S3_USER_UPLOAD: ''
+                    DB_AdminSecret: arn:aws:secretsmanager:us-east-1:175255461604:secret:localDatabasePassword-dqdsJA
+                    DB_EndpointAddress: local-database-databasecluster-47f49f2bdz2w.cluster-cov40yvlgbfu.us-east-1.rds.amazonaws.com
+            CodeUri: /home/ec2-user/environment/fpar2/lambdas/rest-portal-api
+    LambdaForProxyConfigPermission:
+        Type: 'AWS::Lambda::Permission'
+        DependsOn:
+            - APIProxy
+            - LambdaForProxyRestAPI
+        Properties:
+            Action: lambda:InvokeFunction
+            FunctionName: !Ref LambdaForProxyRestAPI
+            Principal: apigateway.amazonaws.com

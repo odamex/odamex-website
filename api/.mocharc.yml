@@ -1,0 +1,7 @@
+exit: true
+extension:
+    - 'ts'
+project: 'tsconfig.test.json'
+recursive: true
+require: 'ts-node/register'
+spec: 'src/**/*.spec.ts'

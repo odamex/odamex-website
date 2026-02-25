@@ -1,0 +1,13 @@
+{
+    "compilerOptions": {
+        "allowJs": true,
+        "checkJs": true,
+        "esModuleInterop": false,
+        "module": "commonjs",
+        "outDir": "built",
+        "removeComments": true,
+        "sourceMap": true,
+        "resolveJsonModule": true,
+        "target": "ES2019"
+    }
+}

@@ -1,0 +1,9 @@
+.nyc_output
+node_modules
+built
+coverage
+tests/__pycache__
+tests/*credentials.json
+tests/*.pyc
+*.http
+*.zip

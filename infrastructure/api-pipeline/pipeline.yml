@@ -8,17 +8,19 @@ Metadata:
         Parameters:
           - EnvironmentName
           - ProjectName
+          - ServiceType
           - ProjectURL
           - HostedZoneId
           - EmailDomainSourceArn
+          - AlertsEmailAddress
+          - AWSApplicationArn
       - Label:
           default: Source Repository Information
         Parameters:
+          - CodeConnectionArn
           - GitOrg
-          - GitHubTokenParameterName
-          - GoogleMapsApiKeyParameterName
           - GitRepo
-          - AppBranch
+          - GitRepoBranch
       - Label:
           default: Network Information
         Parameters:
@@ -27,19 +29,6 @@ Metadata:
           - VPCDefaultSecurityGroup
           - WAFArn
 Parameters:
-  AppBranch:
-    Description: GitHub repository branch name
-    Type: String
-    Default: 'dev'
-    AllowedValues:
-      - 'local'
-      - 'dev'
-      - 'qa'
-      - 'main'
-  GitRepo:
-    Description: GitHub repository name
-    Type: String
-    Default: 'odamex'
   EmailDomainSourceArn:
     Description: ARN for the SES verified identity
     Type: String
@@ -53,14 +42,16 @@ Parameters:
       - 'qa'
       - 'stg'
       - 'prod'
-  GitOrg:
-    Description: GitHub username owning the repo
-    Type: String
-    Default: odamex
   ProjectName:
     Description: Primary project name
     Type: String
     Default: 'odamex'
+  ServiceType:
+    Description: Type of service being deployed (e.g. "ui", "api", etc.)
+    Type: String
+    AllowedValues: 
+      - "ui"
+      - "api"    
   ProjectURL:
     Description: URL for the web application
     Type: String
@@ -68,6 +59,30 @@ Parameters:
   HostedZoneId:
     Description: Route 53 hosted zone ID for the API custom domain
     Type: String
+  AWSApplicationArn:
+    Description: ARN of the associated, pre-defined AWS Application
+    Type: String
+    Default: ""
+  AlertsEmailAddress:
+    Description: Email address for receiving pipeline failures
+    Type: String
+    Default: ""    
+  # Git info
+  CodeConnectionArn:
+    Description: CodeConnection ARN used to access the GitRepo repository
+    Type: String
+  GitOrg:
+    Description: GitHub service account username owning the repo
+    Type: String
+    Default: "odamex"
+  GitRepo:
+    Description: GitHub app repo name
+    Type: String
+    Default: "reponame"
+  GitRepoBranch:
+    Description: GitHub repository branch name. It defaults to main if not specified.
+    Type: String
+    Default: "main"
   VPCID:
     Description: Existing VPC ID (provisioned by ITS)
     Type: AWS::EC2::VPC::Id
@@ -96,7 +111,10 @@ Resources:
   CodePipelineServiceRole:
     Type: AWS::IAM::Role
     Properties:
-      RoleName: !Sub ${ProjectName}-${EnvironmentName}-CodePipelineServiceRole
+      RoleName: !Sub ${ProjectName}-${ServiceType}-${EnvironmentName}-CodePipelineServiceRole
+      Tags:
+        - Key: platform
+          Value: odamex
       AssumeRolePolicyDocument:
         Version: 2012-10-17
         Statement:
@@ -105,7 +123,7 @@ Resources:
               Service: codepipeline.amazonaws.com
             Action: sts:AssumeRole
       Policies:
-        - PolicyName: !Sub ${ProjectName}-${EnvironmentName}-CodePipelineServicePolicy
+        - PolicyName: !Sub ${ProjectName}-${ServiceType}-${EnvironmentName}-CodePipelineServicePolicy
           PolicyDocument:
             Version: 2012-10-17
             Statement:
@@ -137,7 +155,10 @@ Resources:
   CloudFormationDeployRole:
     Type: AWS::IAM::Role
     Properties:
-      RoleName: !Sub ${ProjectName}-${EnvironmentName}-CloudFormationDeployRole
+      RoleName: !Sub ${ProjectName}-${ServiceType}-${EnvironmentName}-CloudFormationDeployRole
+      Tags:
+        - Key: platform
+          Value: odamex
       AssumeRolePolicyDocument:
         Version: 2012-10-17
         Statement:
@@ -150,7 +171,7 @@ Resources:
               Service: cloudtrail.amazonaws.com
             Action: sts:AssumeRole
       Policies:
-        - PolicyName: !Sub ${ProjectName}-${EnvironmentName}-CloudFormationDeployPolicy
+        - PolicyName: !Sub ${ProjectName}-${ServiceType}-${EnvironmentName}-CloudFormationDeployPolicy
           PolicyDocument:
             Statement:
               - Effect: Allow
@@ -189,6 +210,9 @@ Resources:
     Type: AWS::S3::Bucket
     DeletionPolicy: Retain
     Properties:
+      Tags:
+        - Key: platform
+          Value: odamex
       BucketEncryption:
         ServerSideEncryptionConfiguration:
           - ServerSideEncryptionByDefault:
@@ -198,13 +222,33 @@ Resources:
         BlockPublicPolicy: true
         IgnorePublicAcls: true
         RestrictPublicBuckets: true
+  ArtifactBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref ArtifactBucket
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: 'AllowSSLRequestsOnly'
+            Effect: 'Deny'
+            Principal: '*'
+            Action: 's3:*'
+            Resource:
+              - !GetAtt ArtifactBucket.Arn
+              - !Join ['', [!GetAtt ArtifactBucket.Arn, '/*']]
+            Condition:
+              Bool:
+                aws:SecureTransport: 'false'
 
   # Infrastructure bucket to hold nested stacks and lambda code
   InfrastructureBucket:
     Type: AWS::S3::Bucket
     DeletionPolicy: RetainExceptOnCreate
     Properties:
-      BucketName: !Sub '${ProjectName}-${EnvironmentName}-infrastructure'
+      BucketName: !Sub '${ProjectName}-${ServiceType}-${EnvironmentName}-infrastructure'
+      Tags:
+        - Key: platform
+          Value: odamex
       BucketEncryption:
         ServerSideEncryptionConfiguration:
           - ServerSideEncryptionByDefault:
@@ -248,33 +292,34 @@ Resources:
   Pipeline:
     Type: AWS::CodePipeline::Pipeline
     Properties:
-      Name: !Sub ${ProjectName}-${EnvironmentName}-pipeline
+      Name: !Sub ${ProjectName}-${ServiceType}-${EnvironmentName}-pipeline
       Tags:
         - Key: EnvironmentName
           Value: !Ref EnvironmentName
+        - Key: platform
+          Value: odamex
       RoleArn: !GetAtt CodePipelineServiceRole.Arn
       ArtifactStore:
         Type: S3
         Location: !Ref ArtifactBucket
+      PipelineType: V2
       Stages:
         # First we have to pull the source code from the Github repository.
         - Name: Source
           Actions:
-            - Name: App
+            - Name: Application
               ActionTypeId:
                 Category: Source
-                Owner: ThirdParty
-                Provider: GitHub
-                Version: '1'
+                Owner: AWS
+                Provider: CodeStarSourceConnection
+                Version: "1"
               Configuration:
-                Owner: !Ref GitOrg
-                OAuthToken: !Sub '{{resolve:ssm:${GitHubTokenParameterName}}}'
-                Repo: !Ref GitRepo
-                Branch: !Ref AppBranch
-                PollForSourceChanges: false
+                ConnectionArn: !Ref CodeConnectionArn
+                FullRepositoryId: !Sub ${GitOrg}/${GitRepo}
+                BranchName: !Ref GitRepoBranch
+                DetectChanges: false
               OutputArtifacts:
                 - Name: AppArtifact
-
         - Name: Testing
           Actions:
               - Name: WebAppUnitTestsBuild
@@ -287,7 +332,7 @@ Resources:
                 Configuration:
                   ActionMode: CREATE_UPDATE
                   RoleArn: !GetAtt CloudFormationDeployRole.Arn
-                  StackName: !Sub '${ProjectName}-${EnvironmentName}-app-build-tests-project'
+                  StackName: !Sub '${ProjectName}-${ServiceType}-${EnvironmentName}-app-build-tests-project'
                   TemplatePath: AppArtifact::infrastructure/stacks/app-tests-build.yml
                   Capabilities: CAPABILITY_NAMED_IAM
                   ParameterOverrides: !Sub |
@@ -315,32 +360,6 @@ Resources:
 
         - Name: Resources
           Actions:
-            # DB
-            - Name: DB
-              Namespace: DBVars
-              ActionTypeId:
-                Category: Deploy
-                Owner: AWS
-                Version: '1'
-                Provider: CloudFormation
-              Configuration:
-                ActionMode: CREATE_UPDATE
-                RoleArn: !GetAtt CloudFormationDeployRole.Arn
-                StackName: !Sub '${ProjectName}-${EnvironmentName}-database'
-                TemplatePath: AppArtifact::infrastructure/stacks/db.yml
-                Capabilities: CAPABILITY_NAMED_IAM
-                ParameterOverrides: !Sub |
-                    {
-                      "EnvironmentName": "${EnvironmentName}",
-                      "ProjectName": "${ProjectName}",
-                      "DatabaseSubnetList": "${VPCPrivateSubnets}",
-                      "VPCID": "${VPCID}",
-                      "VPCDefaultSecurityGroup": "${VPCDefaultSecurityGroup}"
-                    }
-              InputArtifacts:
-                - Name: AppArtifact
-              RunOrder: 1
-
             # authentication
             - Name: AuthProvider
               Namespace: AuthVars
@@ -352,13 +371,13 @@ Resources:
               Configuration:
                 ActionMode: CREATE_UPDATE
                 RoleArn: !GetAtt CloudFormationDeployRole.Arn
-                StackName: !Sub '${ProjectName}-${EnvironmentName}-auth'
+                StackName: !Sub '${ProjectName}-${ServiceType}-${EnvironmentName}-auth'
                 TemplatePath: AppArtifact::infrastructure/stacks/auth.yml
                 Capabilities: CAPABILITY_NAMED_IAM
                 ParameterOverrides: !Sub |
                   {
-                    "DBAdminSecret": "#{DBVars.DBAdminPasswordV2}",
-                    "DBClusterArn": "#{DBVars.DatabaseClusterArnV2}",
+                    "DBAdminSecret": "",
+                    "DBClusterArn": "",
                     "EmailDomainSourceArn": "${EmailDomainSourceArn}",
                     "EnvironmentName": "${EnvironmentName}",
                     "ProjectName": "${ProjectName}",
@@ -366,9 +385,9 @@ Resources:
                   }
               InputArtifacts:
                 - Name: AppArtifact
-              RunOrder: 2
+              RunOrder: 1
 
-            #ApiSocketVars - API Socket
+            #REST API
             - Name: APIRest
               Namespace: ApiRestVars
               ActionTypeId:
@@ -379,14 +398,14 @@ Resources:
               Configuration:
                 ActionMode: CREATE_UPDATE
                 RoleArn: !GetAtt CloudFormationDeployRole.Arn
-                StackName: !Sub '${ProjectName}-${EnvironmentName}-api-rest'
+                StackName: !Sub '${ProjectName}-${ServiceType}-${EnvironmentName}-api-rest'
                 TemplatePath: AppArtifact::infrastructure/stacks/api-rest.yml
                 Capabilities: CAPABILITY_AUTO_EXPAND,CAPABILITY_NAMED_IAM
                 ParameterOverrides: !Sub |
                     { 
-                      "DatabaseSecurityGroup": "${VPCDefaultSecurityGroup}",
-                      "DatabaseSubnetList": "${VPCPrivateSubnets}",
-                      "DBAdminSecret": "#{DBVars.DBAdminPasswordV2}",
+                      "DatabaseSecurityGroup": "",
+                      "DatabaseSubnetList": "",
+                      "DBAdminSecret": "",
                       "EnvironmentName": "${EnvironmentName}",
                       "ProjectName": "${ProjectName}",
                       "HostedZoneId": "${HostedZoneId}",
@@ -397,7 +416,7 @@ Resources:
                     }
               InputArtifacts:
                 - Name: AppArtifact
-              RunOrder: 4
+              RunOrder: 2
 
             #AppBuildVars - App build project
             - Name: AppBuildProject
@@ -410,19 +429,21 @@ Resources:
               Configuration:
                 ActionMode: CREATE_UPDATE
                 RoleArn: !GetAtt CloudFormationDeployRole.Arn
-                StackName: !Sub '${ProjectName}-${EnvironmentName}-app-build-project'
+                StackName: !Sub '${ProjectName}-${ServiceType}-${EnvironmentName}-app-build-project'
                 TemplatePath: AppArtifact::infrastructure/stacks/app-build.yml
                 Capabilities: CAPABILITY_NAMED_IAM
-                ParameterOverrides: !Sub |
+                ParameterOverrides: !Sub 
+                  - |
                     { 
                       "EnvironmentName": "${EnvironmentName}",
                       "ProjectName": "${ProjectName}",
                       "VPC": "${VPCID}",
-                      "PrivateSubnets": "${VPCPrivateSubnets}",
+                      "PrivateSubnets": "${VPCSubnets}",
                       "SecurityGroup": "${VPCDefaultSecurityGroup}",
-                      "DBAdminSecret": "#{DBVars.DBAdminPasswordV2}",
-                      "DBClusterArn": "#{DBVars.DatabaseClusterArnV2}"
+                      "DBAdminSecret": "",
+                      "DBClusterArn": ""
                     }
+                  - VPCSubnets: !Join [",", !Ref VPCPrivateSubnets]
               InputArtifacts:
                 - Name: AppArtifact
               RunOrder: 5
@@ -445,3 +466,16 @@ Resources:
               OutputArtifacts:
                 - Name: BuildOutput
               RunOrder: 6
+      Triggers:
+        - GitConfiguration:
+            Push:
+              - Branches:
+                  Includes:
+                    - !Ref GitRepoBranch
+                FilePaths:
+                  Includes:
+                    - "./**"
+                  Excludes:
+                    - infrastructure/api-pipeline/**
+            SourceActionName: Application
+          ProviderType: CodeStarSourceConnection

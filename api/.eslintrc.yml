@@ -1,0 +1,25 @@
+env:
+    browser: true
+    commonjs: true
+    es2021: true
+extends:
+    - standard
+    - 'eslint:recommended'
+    - 'plugin:@typescript-eslint/recommended'
+    - 'prettier'
+ignorePatterns:
+    - built
+parser: '@typescript-eslint/parser'
+parserOptions:
+    ecmaVersion: 12
+plugins:
+    - '@typescript-eslint'
+    - prettier
+rules:
+    'no-console': warn
+    'sort-imports': warn
+    '@typescript-eslint/no-explicit-any': warn
+    '@typescript-eslint/no-unused-vars': warn
+    prettier/prettier:
+        - error
+        - endOfLine: auto

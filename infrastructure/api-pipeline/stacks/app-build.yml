@@ -27,6 +27,9 @@ Resources:
     Type: 'AWS::IAM::Role'
     Properties:
       RoleName: !Sub ${ProjectName}-${EnvironmentName}-CodeBuildServiceRole
+      Tags:
+        - Key: platform
+          Value: odamex
       Path: /
       AssumeRolePolicyDocument:
         Version: 2012-10-17
@@ -68,6 +71,9 @@ Resources:
   CodeBuildProject:
     Type: 'AWS::CodeBuild::Project'
     Properties:
+      Tags:
+        - Key: platform
+          Value: odamex
       Artifacts:
         Type: CODEPIPELINE
       Source:
