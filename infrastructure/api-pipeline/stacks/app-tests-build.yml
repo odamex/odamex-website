@@ -8,9 +8,6 @@ Parameters:
     Description: Primary project name
     Type: String
     Default: 'odamex'
-  GitHubTokenParameterName:
-    Type: String
-    NoEcho: true
 
 Conditions:
   TestStage: !Equals [!Ref EnvironmentName, test]

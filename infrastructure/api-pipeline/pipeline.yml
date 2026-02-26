@@ -136,6 +136,7 @@ Resources:
                   - ecr:*
                   - codebuild:StartBuild
                   - codebuild:BatchGetBuilds
+                  - codestar-connections:*
                   - iam:PassRole
                   - cloudformation:CreateChangeSet
                   - cloudformation:CreateStack
