@@ -4,7 +4,6 @@ import bodyParser = require('body-parser');
 import awsServerlessExpressMiddleware = require('aws-serverless-express/middleware');
 import * as routes from './routes';
 import * as healthCheck from './routes/health-check';
-import { router as cspReport } from './routes/security';
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 
 const app = express();
@@ -15,11 +14,9 @@ router.use(bodyParser.urlencoded({ extended: true }));
 router.use(awsServerlessExpressMiddleware.eventContext());
 
 // Enable CORS for all methods
-// TODO -> update to strick final domains only
 
 // register before auth middleware is mounted
 healthCheck.register(router);
-router.use('/api/v1/security', cspReport);
 
 router.use(async function (req: any, res, next) {
     res.header('X-Requested-With', '*');

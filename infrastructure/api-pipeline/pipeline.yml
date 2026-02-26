@@ -334,12 +334,12 @@ Resources:
                   ActionMode: CREATE_UPDATE
                   RoleArn: !GetAtt CloudFormationDeployRole.Arn
                   StackName: !Sub '${ProjectName}-${ServiceType}-${EnvironmentName}-app-build-tests-project'
-                  TemplatePath: AppArtifact::infrastructure/stacks/app-tests-build.yml
+                  TemplatePath: AppArtifact::infrastructure/api-pipeline/stacks/app-tests-build.yml
                   Capabilities: CAPABILITY_NAMED_IAM
                   ParameterOverrides: !Sub |
                     { 
                       "EnvironmentName": "${EnvironmentName}",
-                      "ProjectName": "${ProjectName}",
+                      "ProjectName": "${ProjectName}"
                     }
                 InputArtifacts:
                   - Name: AppArtifact
@@ -373,7 +373,7 @@ Resources:
                 ActionMode: CREATE_UPDATE
                 RoleArn: !GetAtt CloudFormationDeployRole.Arn
                 StackName: !Sub '${ProjectName}-${ServiceType}-${EnvironmentName}-auth'
-                TemplatePath: AppArtifact::infrastructure/stacks/auth.yml
+                TemplatePath: AppArtifact::infrastructure/api-pipeline/stacks/auth.yml
                 Capabilities: CAPABILITY_NAMED_IAM
                 ParameterOverrides: !Sub |
                   {
@@ -400,7 +400,7 @@ Resources:
                 ActionMode: CREATE_UPDATE
                 RoleArn: !GetAtt CloudFormationDeployRole.Arn
                 StackName: !Sub '${ProjectName}-${ServiceType}-${EnvironmentName}-api-rest'
-                TemplatePath: AppArtifact::infrastructure/stacks/api-rest.yml
+                TemplatePath: AppArtifact::infrastructure/api-pipeline/stacks/api-rest.yml
                 Capabilities: CAPABILITY_AUTO_EXPAND,CAPABILITY_NAMED_IAM
                 ParameterOverrides: !Sub |
                     { 
@@ -431,7 +431,7 @@ Resources:
                 ActionMode: CREATE_UPDATE
                 RoleArn: !GetAtt CloudFormationDeployRole.Arn
                 StackName: !Sub '${ProjectName}-${ServiceType}-${EnvironmentName}-app-build-project'
-                TemplatePath: AppArtifact::infrastructure/stacks/app-build.yml
+                TemplatePath: AppArtifact::infrastructure/api-pipeline/stacks/app-build.yml
                 Capabilities: CAPABILITY_NAMED_IAM
                 ParameterOverrides: !Sub 
                   - |
