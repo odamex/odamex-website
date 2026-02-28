@@ -12,9 +12,6 @@ Parameters:
   ProjectURL:
     Type: String
     Default: "odamex.net"
-  BurpSuiteParamName:
-    Type: AWS::SSM::Parameter::Name
-    Default: "/burpsuite/user"
   EmailInvitationSubject:
     Type: String
     Default: >
@@ -43,20 +40,6 @@ Conditions:
   IsStaging: !Equals
     - !Ref EnvironmentName
     - stg
-  # Note: we only run the Burpsuite security scan in the dev environment, so
-  # theoretically we should only need the security scan resources in dev.
-  # However, when testing, we found that the custom auth lambdas were enabled
-  # for the local and qa environment, and removing them from the local user pool
-  # broke the authentication process. The stg environment does not have those
-  # custom auth lambdas, so they are not essential, but we don't necessarily
-  # have time to track down exactly why they're in place and required for local/qa.
-  # So this approach applies the resoures to all of local/dev/qa, to keep things
-  # working.
-  CreateSecurityScanResources: !Or
-    - !Condition IsLocal
-    - !Condition IsDev
-    - !Condition IsQa
-    - !Condition IsStaging
   HasDefaultEmail: !Equals
     - !Ref EmailDomainSourceArn
     - ""
@@ -88,10 +71,7 @@ Resources:
                 Resource: "*"
 
   # This section defines an execution role and Lambda functions called by Cognito to manage
-  # actions and additional custom logic during the authentication process. This was originally
-  # developed to allow Burpsuite test accounts to bypass MFA, but we will also use it
-  # to add custom logic to the account lockout feature to meet FedRAMP requirements.
-  CognitoAuthLambdasRole:
+  # actions and additional custom logic during the authentication process. 
     Type: "AWS::IAM::Role"
     Properties:
       RoleName: !Sub ${ProjectName}-${EnvironmentName}-CognitoLambdasRole
@@ -229,118 +209,6 @@ Resources:
                   - "cognito-identity:*"
                 Resource: "*"
 
-  LambdaCreateAuthChallenge:
-    Type: "AWS::Lambda::Function"
-    Condition: CreateSecurityScanResources
-    Properties:
-      FunctionName: !Sub "${ProjectName}-${EnvironmentName}-create-auth-challenge"
-      Tags:
-        - Key: platform
-          Value: odamex
-      Handler: index.handler
-      MemorySize: 128
-      Role: !GetAtt CognitoAuthLambdasRole.Arn
-      Runtime: nodejs22.x
-      Timeout: 3
-      Code:
-        ZipFile: |
-          exports.handler = (event, context, callback) => {
-            // console.log('event.request', event.request)
-            if (event.request.challengeName == 'CUSTOM_CHALLENGE') {
-                event.response.publicChallengeParameters = {};
-                event.response.publicChallengeParameters.authUserCode = 'User code'
-                event.response.privateChallengeParameters = {};
-                event.response.privateChallengeParameters.answer = event.request.userAttributes['custom:metadata'];
-                event.response.challengeMetadata = 'USERCODE_CHALLENGE';
-            }
-            callback(null, event);
-          }
-
-  LambdaDefineAuthChallenge:
-    Type: "AWS::Lambda::Function"
-    Condition: CreateSecurityScanResources
-    Properties:
-      FunctionName: !Sub "${ProjectName}-${EnvironmentName}-define-auth-challenge"
-      Tags:
-        - Key: platform
-          Value: odamex
-      Handler: index.handler
-      MemorySize: 128
-      Role: !GetAtt CognitoAuthLambdasRole.Arn
-      Runtime: nodejs22.x
-      Timeout: 3
-      Environment:
-        Variables:
-          BURP_SUITE_PARAM_NAME: !Ref BurpSuiteParamName
-      Code:
-        ZipFile: |
-          // define_auth_challenge_lambda with parameter store integration
-          import { SSMClient, GetParameterCommand } from '@aws-sdk/client-ssm';
-
-          export const handler = async (event) => {
-            // console.log('event.request', event);
-
-            try {
-              if (
-                event.request.session.length == 1 &&
-                event.request.session[0].challengeName == 'SRP_A'
-              ) {
-                event.response.issueTokens = false;
-                event.response.failAuthentication = false;
-                event.response.challengeName = 'PASSWORD_VERIFIER';
-              } else if (
-                event.request.session.length == 2 &&
-                event.request.session[1].challengeName == 'PASSWORD_VERIFIER' &&
-                event.request.session[1].challengeResult == true
-              ) {
-                const client = new SSMClient();
-                const input = {
-                  Name: process.EnvironmentName.BURP_SUITE_PARAM_NAME,
-                };
-                const command = new GetParameterCommand(input);
-                const response = await client.send(command);
-                const securityScanUsers = response.Parameter.Value;
-                // console.log(' -- securityScanUser: ', securityScanUsers);
-
-                if (
-                  securityScanUsers.split(',').includes(event.request.userAttributes.sub)
-                ) {
-                  event.response.issueTokens = false;
-                  event.response.failAuthentication = false;
-                  event.response.challengeName = 'CUSTOM_CHALLENGE';
-                } else {
-                  event.response.issueTokens = true;
-                  event.response.failAuthentication = false;
-                  event.response.challengeName = 'SELECT_MFA_TYPE';
-                }
-              } else if (
-                event.request.session.length == 3 &&
-                event.request.session[2].challengeName == 'CUSTOM_CHALLENGE' &&
-                event.request.session[2].challengeResult == true
-              ) {
-                event.response.issueTokens = true;
-                event.response.failAuthentication = false;
-                // adding MFA just in case
-              } else if (
-                event.request.session.length >= 3 &&
-                (event.request.session[event.request.session.length - 1].challengeName == 'SMS_MFA' ||
-                  event.request.session[event.request.session.length - 1].challengeName == 'SOFTWARE_TOKEN_MFA') &&
-                event.request.session[event.request.session.length - 1].challengeResult == true
-              ) {
-                event.response.issueTokens = true;
-                event.response.failAuthentication = false;
-              } else {
-                event.response.issueTokens = false;
-                event.response.failAuthentication = true;
-              }
-            } catch (error) {
-              console.error(error, error.stack);
-            }
-
-            // console.log('event.response: ', event.response);
-            return event;
-          };
-
   LambdaCustomEmails:
     Type: "AWS::Lambda::Function"
     Properties:
@@ -370,34 +238,6 @@ Resources:
             }
             return event;
           };
-
-  LambdaVerifyAuthChallenge:
-    Type: "AWS::Lambda::Function"
-    Condition: CreateSecurityScanResources
-    Properties:
-      FunctionName: !Sub "${ProjectName}-${EnvironmentName}-verify-auth-challenge"
-      Tags:
-        - Key: platform
-          Value: odamex
-      Handler: index.handler
-      MemorySize: 128
-      Role: !GetAtt CognitoAuthLambdasRole.Arn
-      Runtime: nodejs22.x
-      Timeout: 3
-      Code:
-        ZipFile: |
-          exports.handler = (event, context, callback) => {
-            // console.log('event is: ', event)
-            // console.log('event request: ', event.request)
-            // console.log('event response before: ', event.response)
-            if (event.request.privateChallengeParameters.answer == event.request.challengeAnswer) {
-                event.response.answerCorrect = true;
-            } else {
-                event.response.answerCorrect = false;
-            }
-            // console.log('event response after: ', event.response)
-            callback(null, event);
-          }
 
   UserPool:
     Type: "AWS::Cognito::UserPool"
@@ -454,19 +294,7 @@ Resources:
         - SMS_MFA
         - SOFTWARE_TOKEN_MFA
       LambdaConfig:
-        CreateAuthChallenge: !If
-          - CreateSecurityScanResources
-          - !GetAtt LambdaCreateAuthChallenge.Arn
-          - !Ref "AWS::NoValue"
         CustomMessage: !GetAtt LambdaCustomEmails.Arn
-        DefineAuthChallenge: !If
-          - CreateSecurityScanResources
-          - !GetAtt LambdaDefineAuthChallenge.Arn
-          - !Ref "AWS::NoValue"
-        VerifyAuthChallengeResponse: !If
-          - CreateSecurityScanResources
-          - !GetAtt LambdaVerifyAuthChallenge.Arn
-          - !Ref "AWS::NoValue"
         # PreAuthentication: !GetAtt LambdaPrePostAuthTrigger.Arn
         # PostAuthentication: !GetAtt LambdaPrePostAuthTrigger.Arn
       MfaConfiguration: OPTIONAL
@@ -544,33 +372,6 @@ Resources:
       Roles:
         authenticated: !GetAtt CognitoAuthorizedRole.Arn
         unauthenticated: !GetAtt CognitoUnAuthorizedRole.Arn
-
-  LambdaCreateAuthChallengePermission:
-    Type: AWS::Lambda::Permission
-    Condition: CreateSecurityScanResources
-    Properties:
-      Action: lambda:InvokeFunction
-      FunctionName: !GetAtt LambdaCreateAuthChallenge.Arn
-      Principal: cognito-idp.amazonaws.com
-      SourceArn: !GetAtt UserPool.Arn
-
-  LambdaDefineAuthChallengePermission:
-    Type: AWS::Lambda::Permission
-    Condition: CreateSecurityScanResources
-    Properties:
-      Action: lambda:InvokeFunction
-      FunctionName: !GetAtt LambdaDefineAuthChallenge.Arn
-      Principal: cognito-idp.amazonaws.com
-      SourceArn: !GetAtt UserPool.Arn
-
-  LambdaVerifyAuthChallengePermission:
-    Type: AWS::Lambda::Permission
-    Condition: CreateSecurityScanResources
-    Properties:
-      Action: lambda:InvokeFunction
-      FunctionName: !GetAtt LambdaVerifyAuthChallenge.Arn
-      Principal: cognito-idp.amazonaws.com
-      SourceArn: !GetAtt UserPool.Arn
 
   #LambdaPrePostAuthTriggerPermission:
   #  Type: AWS::Lambda::Permission
