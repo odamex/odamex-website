@@ -572,13 +572,13 @@ Resources:
       Principal: cognito-idp.amazonaws.com
       SourceArn: !GetAtt UserPool.Arn
 
-  LambdaPrePostAuthTriggerPermission:
-    Type: AWS::Lambda::Permission
-    Properties:
-      Action: lambda:InvokeFunction
-      FunctionName: !GetAtt LambdaPrePostAuthTrigger.Arn
-      Principal: cognito-idp.amazonaws.com
-      SourceArn: !GetAtt UserPool.Arn
+  #LambdaPrePostAuthTriggerPermission:
+  #  Type: AWS::Lambda::Permission
+  #  Properties:
+  #    Action: lambda:InvokeFunction
+  #    FunctionName: !GetAtt LambdaPrePostAuthTrigger.Arn
+  #    Principal: cognito-idp.amazonaws.com
+  #    SourceArn: !GetAtt UserPool.Arn
 
   LambdaCustomEmailsPermission:
     Type: AWS::Lambda::Permission
