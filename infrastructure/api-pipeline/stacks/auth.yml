@@ -22,7 +22,7 @@ Parameters:
     Type: String
   ReplyToEmailAddress:
     Type: String
-    Default: ""
+    Default: "noreply@odamex.net"
   EmailDomainSourceArn:
     Type: String
     Default: ""
