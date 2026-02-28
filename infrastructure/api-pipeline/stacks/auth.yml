@@ -467,8 +467,8 @@ Resources:
           - CreateSecurityScanResources
           - !GetAtt LambdaVerifyAuthChallenge.Arn
           - !Ref "AWS::NoValue"
-        PreAuthentication: !GetAtt LambdaPrePostAuthTrigger.Arn
-        PostAuthentication: !GetAtt LambdaPrePostAuthTrigger.Arn
+        # PreAuthentication: !GetAtt LambdaPrePostAuthTrigger.Arn
+        # PostAuthentication: !GetAtt LambdaPrePostAuthTrigger.Arn
       MfaConfiguration: OPTIONAL
       SmsAuthenticationMessage: "Your FPAR authentication code is {####}"
       SmsVerificationMessage: "Your FPAR verification code is {####}"
