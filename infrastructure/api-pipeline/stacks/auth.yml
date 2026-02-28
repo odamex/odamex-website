@@ -15,7 +15,7 @@ Parameters:
   EmailInvitationSubject:
     Type: String
     Default: >
-      Family Planning Annual Report: Your User Account
+      Odamex: Your User Account
   DBAdminSecret:
     Type: String
   DBClusterArn:
