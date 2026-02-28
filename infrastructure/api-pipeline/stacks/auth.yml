@@ -263,7 +263,7 @@ Resources:
       EnabledMfas:
         - SMS_MFA
         - SOFTWARE_TOKEN_MFA
-      LambdaConfig:
+      # LambdaConfig:
         # CustomMessage: !GetAtt LambdaCustomEmails.Arn
         # PreAuthentication: !GetAtt LambdaPrePostAuthTrigger.Arn
         # PostAuthentication: !GetAtt LambdaPrePostAuthTrigger.Arn
