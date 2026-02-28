@@ -268,8 +268,8 @@ Resources:
         # PreAuthentication: !GetAtt LambdaPrePostAuthTrigger.Arn
         # PostAuthentication: !GetAtt LambdaPrePostAuthTrigger.Arn
       MfaConfiguration: OPTIONAL
-      SmsAuthenticationMessage: "Your FPAR authentication code is {####}"
-      SmsVerificationMessage: "Your FPAR verification code is {####}"
+      SmsAuthenticationMessage: "Your authentication code is {####}"
+      SmsVerificationMessage: "Your verification code is {####}"
       SmsConfiguration:
         ExternalId: !Sub "${ProjectName}-${EnvironmentName}-external"
         SnsCallerArn: !GetAtt SNSRole.Arn
@@ -304,7 +304,7 @@ Resources:
             MaxLength: 2048
       EmailConfiguration:
         EmailSendingAccount: !If [HasDefaultEmail, COGNITO_DEFAULT, DEVELOPER]
-        From: !Sub "FPAR System <no-reply@${ProjectURL}>"
+        From: !Sub "Odamex System <no-reply@${ProjectURL}>"
         ReplyToEmailAddress: !Ref ReplyToEmailAddress
         SourceArn:
           !If [HasDefaultEmail, !Ref AWS::NoValue, !Ref EmailDomainSourceArn]
